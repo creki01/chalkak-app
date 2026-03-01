@@ -10,8 +10,15 @@
         .btn-green { background: #34c759; } 
         #preview { max-width: 100%; margin-top: 20px; border-radius: 12px; display: none; }
         #resultContainer { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        #resultText { white-space: pre-wrap; word-break: break-all; font-size: 16px; margin-bottom: 20px; color: #333; }
+        #resultText { white-space: pre-wrap; word-break: break-all; font-size: 16px; margin-bottom: 20px; color: #333; line-height: 1.5; }
         #loading { display: none; margin-top: 20px; color: #007aff; font-weight: bold; }
+        
+        /* 1. 속도 조절 디자인 추가 */
+        .speed-control { margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: bold; color: #333;}
+        select { padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; outline: none; }
+        
+        /* 2. 읽는 곳 형광펜 디자인 추가 */
+        .highlight { background-color: #ffeb3b; font-weight: bold; padding: 2px 0; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
@@ -26,8 +33,20 @@
     
     <div id="resultContainer">
         <div id="resultText"></div>
+        
+        <div class="speed-control">
+            <label for="speedSelect">🗣️ 속도 조절:</label>
+            <select id="speedSelect">
+                <option value="0.5">아주 느리게 (0.5x)</option>
+                <option value="0.8">조금 느리게 (0.8x)</option>
+                <option value="1.0" selected>정상 (1.0x)</option>
+                <option value="1.2">조금 빠르게 (1.2x)</option>
+                <option value="1.5">빠르게 (1.5x)</option>
+            </select>
+        </div>
+
         <button class="btn btn-green" id="speakBtn" onclick="playSpeech()">🔊 원어민 발음 듣기</button>
-        <button class="btn" style="background-color: #8e8e93; margin-top: 10px;" onclick="stopSpeech()">⏹️ 발음 정지</button>
+        <button class="btn" style="background-color: #8e8e93;" onclick="stopSpeech()">⏹️ 발음 정지</button>
     </div>
 
     <script>
@@ -36,6 +55,7 @@
         const resultContainer = document.getElementById('resultContainer');
         const resultText = document.getElementById('resultText');
         const loading = document.getElementById('loading');
+        const speedSelect = document.getElementById('speedSelect');
         
         let extractedSentence = ""; 
 
@@ -99,14 +119,51 @@
 
             const utterance = new SpeechSynthesisUtterance(extractedSentence);
             utterance.lang = 'en-US'; 
-            utterance.rate = 0.9; 
             
+            // 사용자가 선택한 속도값 적용
+            utterance.rate = parseFloat(speedSelect.value); 
+            
+            // 단어를 읽을 때마다 발생하는 이벤트 (형광펜 효과)
+            utterance.onboundary = function(event) {
+                if (event.name === 'word') {
+                    const text = extractedSentence;
+                    const charIndex = event.charIndex;
+                    let end = charIndex + (event.charLength || 0);
+                    
+                    // 일부 브라우저 호환성을 위한 길이 계산
+                    if (!event.charLength) {
+                        let nextSpace = text.indexOf(' ', charIndex);
+                        let nextNewline = text.indexOf('\n', charIndex);
+                        
+                        if (nextSpace !== -1 && nextNewline !== -1) end = Math.min(nextSpace, nextNewline);
+                        else if (nextSpace !== -1) end = nextSpace;
+                        else if (nextNewline !== -1) end = nextNewline;
+                        else end = text.length;
+                    }
+
+                    // 읽고 있는 단어만 형광펜 태그로 감싸기
+                    const before = text.slice(0, charIndex);
+                    const word = text.slice(charIndex, end);
+                    const after = text.slice(end);
+
+                    resultText.innerHTML = before + '<span class="highlight">' + word + '</span>' + after;
+                }
+            };
+
+            // 다 읽고 나면 형광펜 지우고 원래대로
+            utterance.onend = function() {
+                resultText.innerText = extractedSentence;
+            };
+
             window.speechSynthesis.speak(utterance);
         }
 
         function stopSpeech() {
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
+                if (extractedSentence) {
+                    resultText.innerText = extractedSentence; // 멈추면 형광펜 초기화
+                }
             }
         }
     </script>
