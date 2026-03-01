@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📸 찰칵 스피킹</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f8f9fa; margin: 0; }
+        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; }
+        #preview { max-width: 100%; margin-top: 20px; border-radius: 12px; display: none; }
+        #resultArea { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; white-space: pre-wrap; word-break: break-all; font-size: 16px; }
+        #loading { display: none; margin-top: 20px; color: #007aff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>📸 찰칵 스피킹</h1>
+    <p>사진을 찍으면 영어 텍스트를 추출합니다.</p>
+
+    <input type="file" id="imageInput" accept="image/*" capture="environment" style="display: none;">
+    <button class="btn" onclick="document.getElementById('imageInput').click()">사진 찍기 / 갤러리 선택</button>
+
+    <img id="preview" alt="미리보기">
+    <div id="loading">⏳ 구글 AI가 글자를 읽고 있습니다...</div>
+    <div id="resultArea"></div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const resultArea = document.getElementById('resultArea');
+        const loading = document.getElementById('loading');
+
+        imageInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                
+                const base64Image = e.target.result.split(',')[1]; 
+                sendToVisionAPI(base64Image);
+            };
+            reader.readAsDataURL(file); 
+        });
+
+        async function sendToVisionAPI(base64Image) {
+            loading.style.display = 'block';
+            resultArea.style.display = 'none';
+            resultArea.innerText = '';
+
+            try {
+                const response = await fetch('/api/vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64Image })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+
+                const extractedText = data.responses[0]?.fullTextAnnotation?.text;
+                resultArea.innerText = extractedText ? extractedText : '글자를 찾지 못했어요.';
+            } catch (error) {
+                resultArea.innerText = '오류: ' + error.message;
+            } finally {
+                loading.style.display = 'none';
+                resultArea.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
