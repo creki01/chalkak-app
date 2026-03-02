@@ -8,7 +8,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
-// 1. 구글 Vision API (영어, 일본어 모두 인식하도록 힌트 추가!)
+// 1. 구글 Vision API
 app.post('/api/vision', async (req, res) => {
     try {
         const base64Image = req.body.image;
@@ -19,7 +19,7 @@ app.post('/api/vision', async (req, res) => {
             requests: [{
                 image: { content: base64Image },
                 features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
-                imageContext: { languageHints: ['en', 'ja'] } // 🇯🇵 일본어 힌트 추가!
+                imageContext: { languageHints: ['en', 'ja', 'ko'] } // 한국어도 힌트에 추가
             }]
         };
 
@@ -48,27 +48,8 @@ app.post('/api/summarize', async (req, res) => {
             return res.status(500).json({ error: '서버에 GEMINI_API_KEY가 없습니다.' });
         }
 
-        // 🤖 요약 시 원문, 번역, 발음을 따로 분리해서 달라고 꼼꼼하게 명령!
         const prompt = `다음 텍스트가 영어인지 일본어인지 파악해서, 섀도잉 연습용 1줄 요약본을 초급, 중급, 고급 3단계로 작성해. 
-        반드시 아래 JSON 형식으로만 대답해.
-        {
-          "beginner": {
-            "text": "원어 문장", 
-            "translation": "한국어 번역", 
-            "pronunciation": "일본어일 경우 일본어 발음의 한국어 표기 (영어면 빈칸)"
-          },
-          "intermediate": {
-            "text": "원어 문장", 
-            "translation": "한국어 번역", 
-            "pronunciation": "일본어 발음 표기"
-          },
-          "advanced": {
-            "text": "원어 문장", 
-            "translation": "한국어 번역", 
-            "pronunciation": "일본어 발음 표기"
-          }
-        }
-        텍스트: ${text}`;
+        일본어일 경우 한국어 발음 표기를 적고, 영어일 경우 발음 표기는 빈칸으로 둬.`;
 
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         
@@ -76,16 +57,45 @@ app.post('/api/summarize', async (req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" } 
+                contents: [{ parts: [{ text: prompt + "\n\n텍스트: " + text }] }],
+                generationConfig: { 
+                    responseMimeType: "application/json",
+                    // 구조를 100% 강제하는 설정 (이게 없으면 AI가 가끔 [object Object] 오류를 냅니다)
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            beginner: {
+                                type: "OBJECT",
+                                properties: {
+                                    text: { type: "STRING", description: "원어 문장" },
+                                    translation: { type: "STRING", description: "한국어 번역" },
+                                    pronunciation: { type: "STRING", description: "일본어 발음의 한국어 표기" }
+                                }
+                            },
+                            intermediate: {
+                                type: "OBJECT",
+                                properties: {
+                                    text: { type: "STRING", description: "원어 문장" },
+                                    translation: { type: "STRING", description: "한국어 번역" },
+                                    pronunciation: { type: "STRING", description: "일본어 발음의 한국어 표기" }
+                                }
+                            },
+                            advanced: {
+                                type: "OBJECT",
+                                properties: {
+                                    text: { type: "STRING", description: "원어 문장" },
+                                    translation: { type: "STRING", description: "한국어 번역" },
+                                    pronunciation: { type: "STRING", description: "일본어 발음의 한국어 표기" }
+                                }
+                            }
+                        }
+                    }
+                } 
             })
         });
 
         const data = await response.json();
-        
-        if (!response.ok) {
-            return res.status(500).json({ error: 'Gemini API 호출 에러' });
-        }
+        if (!response.ok) return res.status(500).json({ error: 'Gemini API 호출 에러' });
 
         const aiText = data.candidates[0].content.parts[0].text;
         res.json(JSON.parse(aiText));
