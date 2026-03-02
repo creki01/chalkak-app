@@ -1,4 +1,65 @@
-<script>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📸 찰칵 스피킹</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f8f9fa; margin: 0; }
+        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 10px;}
+        .btn-green { background: #34c759; } 
+        #preview { max-width: 100%; margin-top: 20px; border-radius: 12px; display: none; }
+        
+        #resultContainer { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #resultText { font-size: 16px; margin-bottom: 20px; color: #333; line-height: 1.8; border-bottom: 1px solid #eee; padding-bottom: 20px;}
+        
+        #summaryContainer { margin-top: 20px; text-align: left; background: #e3f2fd; padding: 20px; border-radius: 12px; display: none; }
+        #summaryContainer h3 { margin-top: 0; color: #0d47a1; font-size: 18px;}
+        
+        #loading { display: none; margin-top: 20px; color: #007aff; font-weight: bold; }
+        .speed-control { margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: bold; color: #333;}
+        select { padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; outline: none; }
+        
+        .sentence { transition: background-color 0.2s; cursor: pointer; border-radius: 4px; display: inline-block; width: 100%; margin-bottom: 10px; }
+        .sentence:active { background-color: #e0e0e0; }
+        .highlight { background-color: #ffeb3b; font-weight: bold; padding: 2px 0; }
+    </style>
+</head>
+<body>
+    <h1>📸 찰칵 스피킹</h1>
+    <p>사진을 찍으면 텍스트 추출 & 요약까지! (한/영/일 지원)</p>
+
+    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+    <button class="btn" onclick="document.getElementById('imageInput').click()">사진 찍기 / 갤러리 선택</button>
+
+    <img id="preview" alt="미리보기">
+    <div id="loading">⏳ 구글 AI가 글자를 읽고 있습니다...</div>
+    
+    <div id="resultContainer">
+        <div id="resultText"></div>
+        
+        <div id="summaryContainer">
+            <h3>💡 AI 3단계 요약 훈련</h3>
+            <p style="font-size: 13px; color: #555; margin-top: -10px;">(터치해서 섀도잉 하세요!)</p>
+            <div id="summaryContent"></div>
+        </div>
+        
+        <div class="speed-control" style="margin-top: 20px;">
+            <label for="speedSelect">🗣️ 속도 조절:</label>
+            <select id="speedSelect">
+                <option value="0.5">아주 느리게 (0.5x)</option>
+                <option value="0.8">조금 느리게 (0.8x)</option>
+                <option value="1.0" selected>정상 (1.0x)</option>
+                <option value="1.2">조금 빠르게 (1.2x)</option>
+                <option value="1.5">빠르게 (1.5x)</option>
+            </select>
+        </div>
+
+        <button class="btn btn-green" id="speakBtn" onclick="playSpeech()">🔊 처음부터 듣기</button>
+        <button class="btn" style="background-color: #8e8e93;" onclick="stopSpeech()">⏹️ 발음 정지</button>
+    </div>
+
+    <script>
         const imageInput = document.getElementById('imageInput');
         const preview = document.getElementById('preview');
         const resultContainer = document.getElementById('resultContainer');
@@ -11,7 +72,6 @@
         let sentences = []; 
         let currentSentenceIndex = 0; 
 
-        // 시스템 음성 목록 미리 불러오기 (일본어 엔진을 확실히 잡기 위함)
         let availableVoices = [];
         window.speechSynthesis.onvoiceschanged = () => {
             availableVoices = window.speechSynthesis.getVoices();
@@ -21,13 +81,11 @@
             return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(text);
         }
 
-        // 🗣️ 음성 생성 헬퍼 함수
         function createUtterance(text, isJapanese) {
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.rate = parseFloat(speedSelect.value);
             utterance.lang = isJapanese ? 'ja-JP' : 'en-US';
             
-            // 기기에 설치된 일본어/영어 원어민 목소리를 강제로 매칭
             const voices = window.speechSynthesis.getVoices();
             if (isJapanese) {
                 const jaVoice = voices.find(v => v.lang.includes('ja') || v.name.includes('Japanese'));
@@ -126,7 +184,6 @@
                     
                     const summaryData = data[lvl.key] || {};
                     
-                    // 화면에 보여줄 텍스트 조립 (원문 -> 번역 -> 발음표기 순서대로 각각 줄바꿈)
                     let displayText = summaryData.text || '';
                     if (summaryData.translation) displayText += `\n${summaryData.translation}`;
                     if (summaryData.pronunciation) displayText += `\n${summaryData.pronunciation}`;
@@ -201,3 +258,5 @@
             });
         }
     </script>
+</body>
+</html>
