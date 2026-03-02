@@ -24,7 +24,7 @@
         #summaryContainer { margin-top: 20px; text-align: left; background: #e3f2fd; padding: 20px; border-radius: 12px; display: none; }
         #summaryContainer h3 { margin-top: 0; color: #0d47a1; font-size: 18px;}
         
-        #loading { display: none; margin-top: 20px; color: #007aff; font-weight: bold; }
+        #loading { display: none; margin-top: 20px; color: #007aff; font-weight: bold; white-space: pre-wrap;}
         .speed-control { margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: bold; color: #333;}
         select { padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; outline: none; }
         
@@ -41,6 +41,10 @@
         .word-trans { color: #555; font-size: 14px; margin-bottom: 3px; }
         .word-pron { color: #888; font-size: 13px; }
         .delete-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 16px; color: #ff3b30; cursor: pointer; }
+        
+        /* ⭐️ 다국어 변환기 디자인 */
+        #translateControl { background: #f1f3f5; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
+        .mini-btn { padding: 8px 12px; font-size: 14px; border-radius: 6px; cursor: pointer; border: none; color: white; margin-left: 5px; }
     </style>
 </head>
 <body>
@@ -65,6 +69,24 @@
             <div id="loading">⏳ 구글 AI가 작업 중입니다...</div>
             
             <div id="resultContainer">
+                
+                <div id="translateControl" style="display: none;">
+                    <span style="font-weight: bold; margin-right: 5px;">🌍 변환:</span>
+                    <select id="langSelect" style="margin-right: 5px; padding: 6px;">
+                        <option value="ko-KR">한국어</option>
+                        <option value="zh-CN">중국어</option>
+                        <option value="ja-JP">일본어</option>
+                        <option value="es-ES">스페인어</option>
+                        <option value="ru-RU">러시아어</option>
+                        <option value="vi-VN">베트남어</option>
+                        <option value="en-US">영어</option>
+                        <option value="de-DE">독일어</option>
+                        <option value="fr-FR">프랑스어</option>
+                    </select>
+                    <button class="mini-btn" style="background: #007aff;" onclick="translateMainText()">변경</button>
+                    <button class="mini-btn" style="background: #8e8e93;" onclick="restoreOriginalText()">원본</button>
+                </div>
+
                 <div id="resultText"></div>
                 
                 <div id="summaryContainer">
@@ -110,6 +132,9 @@
         let isLooping = false; 
         let currentLoopTarget = null; 
 
+        // ⭐️ 원본 텍스트 보존용 변수
+        let originalExtractedText = "";
+
         let myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
 
         function switchTab(tab) {
@@ -129,13 +154,9 @@
             }
         }
 
-        // ⭐️ 한/영/일 언어 자동 감지 함수
         function getLang(text) {
-            // 히라가나, 가타카나가 섞여 있으면 일본어로 간주
             if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
-            // 한글이 섞여 있으면 한국어로 간주
             if (/[가-힣]/.test(text)) return 'ko-KR';
-            // 그 외에는 기본 영어로 간주
             return 'en-US';
         }
 
@@ -208,10 +229,10 @@
 
         function handleExtractedText(text) {
             if (text && text.trim() !== "") {
-                sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
-                sentences.forEach((sentence, index) => {
-                    createSentenceUI(sentence, index, resultText);
-                });
+                originalExtractedText = text; // 원본 보존
+                document.getElementById('translateControl').style.display = 'block';
+                
+                renderSentences(text, resultText, "auto");
                 generateSummary(text);
             } else {
                 resultText.innerText = '글자를 찾지 못했어요.';
@@ -219,10 +240,20 @@
             }
         }
 
+        // ⭐️ 화면에 문장 조각조각 뿌려주는 함수 (번역기에서도 재사용)
+        function renderSentences(text, container, langType = "auto") {
+            container.innerHTML = '';
+            sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
+            sentences.forEach((sentence, index) => {
+                createSentenceUI(sentence, index, container, sentence, langType);
+            });
+        }
+
         function startLoading() {
             loading.style.display = 'block';
             resultContainer.style.display = 'none';
             summaryContainer.style.display = 'none';
+            document.getElementById('translateControl').style.display = 'none';
             resultText.innerHTML = '';
             sentences = [];
         }
@@ -230,6 +261,70 @@
         function finishLoading() {
             loading.style.display = 'none';
             resultContainer.style.display = 'block';
+        }
+
+        // ⭐️ 신규: 다국어 전체 번역 요청 함수
+        async function translateMainText() {
+            if (!originalExtractedText) return;
+            stopSpeech();
+            
+            const langSelect = document.getElementById('langSelect');
+            const targetLangCode = langSelect.value;
+            const targetLangName = langSelect.options[langSelect.selectedIndex].text;
+
+            loading.innerText = `⏳ 본문을 ${targetLangName}로 변환 중입니다...`;
+            loading.style.display = 'block';
+            resultText.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/translate-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: originalExtractedText, targetLang: targetLangName })
+                });
+                const data = await response.json();
+                
+                // 번역 완료 후 화면에 뿌리기 (발음 엔진도 해당 국가로 강제 지정!)
+                renderSentences(data.text, resultText, targetLangCode);
+            } catch (error) {
+                resultText.innerText = "번역에 실패했습니다.";
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // ⭐️ 신규: 다시 원본으로 돌아가는 함수
+        function restoreOriginalText() {
+            stopSpeech();
+            renderSentences(originalExtractedText, resultText, "auto");
+        }
+
+        // ⭐️ 수정: 문장 생성 시 성우(언어) 정보도 태그 안에 숨겨두기
+        function createSentenceUI(displayText, id, container, speakText = null, lang = "auto") {
+            const actualSpeakText = speakText || displayText.split('\n')[0]; 
+            const cleanText = actualSpeakText.trim();
+
+            const box = document.createElement('div');
+            box.className = 'sentence-box';
+
+            const span = document.createElement('span');
+            span.className = 'sentence';
+            span.id = `sentence-${id}`;
+            span.innerText = displayText.trim() + ' ';
+            span.dataset.lang = lang; // 👈 여기에 국가 코드 저장
+            span.onclick = function() { toggleLoop(cleanText, this); };
+
+            const starBtn = document.createElement('button');
+            starBtn.className = 'star-btn';
+            starBtn.innerText = '⭐️';
+            if (myWordbook.some(item => item.text === cleanText)) {
+                starBtn.classList.add('saved');
+            }
+            starBtn.onclick = function() { toggleStar(cleanText, this, box); };
+
+            box.appendChild(span);
+            box.appendChild(starBtn);
+            container.appendChild(box);
         }
 
         async function generateSummary(text) {
@@ -254,7 +349,8 @@
                             displayText += `\n[${summaryData.pronunciation}]`;
                         }
                         
-                        createSentenceUI(displayText, level, summaryContent, summaryData.text); 
+                        // 요약본은 무조건 자동 감지로 읽게 "auto" 부여
+                        createSentenceUI(displayText, level, summaryContent, summaryData.text, "auto"); 
                     }
                 });
                 finishLoading();
@@ -262,32 +358,6 @@
                 summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다.`;
                 finishLoading();
             }
-        }
-
-        function createSentenceUI(displayText, id, container, speakText = null) {
-            const actualSpeakText = speakText || displayText.split('\n')[0]; 
-            const cleanText = actualSpeakText.trim();
-
-            const box = document.createElement('div');
-            box.className = 'sentence-box';
-
-            const span = document.createElement('span');
-            span.className = 'sentence';
-            span.id = `sentence-${id}`;
-            span.innerText = displayText.trim() + ' ';
-            span.onclick = function() { toggleLoop(cleanText, this); };
-
-            const starBtn = document.createElement('button');
-            starBtn.className = 'star-btn';
-            starBtn.innerText = '⭐️';
-            if (myWordbook.some(item => item.text === cleanText)) {
-                starBtn.classList.add('saved');
-            }
-            starBtn.onclick = function() { toggleStar(cleanText, this, box); };
-
-            box.appendChild(span);
-            box.appendChild(starBtn);
-            container.appendChild(box);
         }
 
         async function toggleStar(text, btnElement, boxElement) {
@@ -343,7 +413,7 @@
                                  : '';
 
                 div.innerHTML = `
-                    <div class="word-text sentence" id="word-${index}">${item.text}</div>
+                    <div class="word-text sentence" id="word-${index}" data-lang="auto">${item.text}</div>
                     <div class="word-trans">${item.translation}</div>
                     ${pronHtml}
                     <button class="delete-btn" onclick="deleteFromWordbook(${index})">✖</button>
@@ -377,8 +447,9 @@
             if (!isLooping || currentLoopTarget !== element) return;
             const utterance = new SpeechSynthesisUtterance(text);
             
-            // ⭐️ 한국어/영어/일본어 자동 감지 적용!
-            utterance.lang = getLang(text);
+            // ⭐️ 태그에 숨겨둔 언어 코드 확인 (auto면 자동 감지, 아니면 해당 언어 강제 지정)
+            const langAttr = element.dataset.lang || 'auto';
+            utterance.lang = langAttr === 'auto' ? getLang(text) : langAttr;
             utterance.rate = parseFloat(speedSelect.value);
             
             utterance.onend = function() {
@@ -407,8 +478,8 @@
             const textToSpeak = sentences[sequentialIndex];
             const utterance = new SpeechSynthesisUtterance(textToSpeak);
             
-            // ⭐️ 한국어/영어/일본어 자동 감지 적용!
-            utterance.lang = getLang(textToSpeak);
+            const langAttr = targetSpan ? targetSpan.dataset.lang : 'auto';
+            utterance.lang = langAttr === 'auto' ? getLang(textToSpeak) : langAttr;
             utterance.rate = parseFloat(speedSelect.value); 
             
             utterance.onend = function() {
