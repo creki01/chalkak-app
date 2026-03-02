@@ -191,7 +191,6 @@
                 ['beginner', 'intermediate', 'advanced'].forEach(level => {
                     if (data[level]) {
                         const summaryData = data[level];
-                        // ⭐️ undefined 방어 및 발음 유무에 따른 렌더링
                         const transText = summaryData.translation || '번역을 불러오지 못했습니다.';
                         let displayText = `${summaryData.text}\n${transText}`;
                         
@@ -208,7 +207,7 @@
         }
 
         function createSentenceUI(displayText, id, container, speakText = null) {
-            const actualSpeakText = speakText || displayText.split('\n')[0]; // 소리낼 때는 무조건 첫 줄(원문)만!
+            const actualSpeakText = speakText || displayText.split('\n')[0]; 
             const cleanText = actualSpeakText.trim();
 
             const box = document.createElement('div');
@@ -252,7 +251,6 @@
                 });
                 const data = await res.json();
                 
-                // ⭐️ undefined 방어
                 const finalTranslation = data.translation || '번역을 불러오지 못했습니다.';
                 const finalPronunciation = data.pronunciation || '';
 
@@ -282,16 +280,16 @@
                 const div = document.createElement('div');
                 div.className = 'word-item';
                 
-                // ⭐️ 발음이 빈칸이면 아예 안 그리도록 설정
                 const pronHtml = (item.pronunciation && item.pronunciation.trim() !== '') 
                                  ? `<div class="word-pron">[${item.pronunciation}]</div>` 
                                  : '';
 
+                // ⭐️ 핵심 수정 부분: 텍스트 대신 '인덱스 번호(순서)'를 전달해서 지우게 만듦
                 div.innerHTML = `
                     <div class="word-text sentence" id="word-${index}">${item.text}</div>
                     <div class="word-trans">${item.translation}</div>
                     ${pronHtml}
-                    <button class="delete-btn" onclick="deleteFromWordbook('${item.text}')">✖</button>
+                    <button class="delete-btn" onclick="deleteFromWordbook(${index})">✖</button>
                 `;
                 
                 const textSpan = div.querySelector('.word-text');
@@ -301,9 +299,10 @@
             });
         }
 
-        function deleteFromWordbook(text) {
+        // ⭐️ 핵심 수정 부분: 순서를 받아서 해당 순서의 데이터를 쏙 빼냅니다.
+        function deleteFromWordbook(index) {
             if(confirm("이 문장을 단어장에서 삭제할까요?")) {
-                myWordbook = myWordbook.filter(item => item.text !== text);
+                myWordbook.splice(index, 1); // 배열에서 그 번호에 해당하는 문장 1개를 삭제
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
                 renderWordbook(); 
             }
