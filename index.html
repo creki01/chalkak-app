@@ -20,14 +20,14 @@
         .speed-control { margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: bold; color: #333;}
         select { padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; outline: none; }
         
-        .sentence { transition: background-color 0.2s; cursor: pointer; border-radius: 4px; }
+        .sentence { transition: background-color 0.2s; cursor: pointer; border-radius: 4px; display: inline-block; width: 100%; margin-bottom: 10px; }
         .sentence:active { background-color: #e0e0e0; }
         .highlight { background-color: #ffeb3b; font-weight: bold; padding: 2px 0; }
     </style>
 </head>
 <body>
     <h1>📸 찰칵 스피킹</h1>
-    <p>사진을 찍으면 영어 텍스트 추출 & 요약까지!</p>
+    <p>사진을 찍으면 텍스트 추출 & 요약까지! (한/영/일 지원)</p>
 
     <input type="file" id="imageInput" accept="image/*" style="display: none;">
     <button class="btn" onclick="document.getElementById('imageInput').click()">사진 찍기 / 갤러리 선택</button>
@@ -72,6 +72,11 @@
         let sentences = []; 
         let currentSentenceIndex = 0; 
 
+        // 🇯🇵 언어 자동 감지 함수 (일본어 문자가 섞여있으면 true 반환)
+        function isJapaneseText(text) {
+            return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(text);
+        }
+
         imageInput.addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -107,7 +112,8 @@
 
                 const text = data.responses[0]?.fullTextAnnotation?.text;
                 if (text) {
-                    sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
+                    // 일본어일 때는 마침표(。) 기준으로도 잘 쪼개지도록 정규식 추가
+                    sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
                     sentences.forEach((sentence, index) => {
                         const span = document.createElement('span');
                         span.className = 'sentence';
@@ -141,7 +147,6 @@
                 });
                 const data = await response.json();
                 
-                // 🚨 에러 체크 추가: 실패 시 undefined 말고 진짜 에러 메시지 출력
                 if (!response.ok) throw new Error(data.error || '요약본 생성 실패');
                 
                 summaryContent.innerHTML = '';
@@ -154,15 +159,30 @@
                 levels.forEach(lvl => {
                     const p = document.createElement('p');
                     p.innerHTML = `<strong>${lvl.title}</strong><br>`;
+                    
                     const span = document.createElement('span');
                     span.className = 'sentence';
-                    span.innerText = data[lvl.key];
+                    
+                    const summaryData = data[lvl.key];
+                    
+                    // 화면에 보여줄 텍스트 조립 (원문 -> 번역 -> 발음표기)
+                    let displayText = summaryData.text;
+                    if (summaryData.translation) displayText += `\n${summaryData.translation}`;
+                    if (summaryData.pronunciation) displayText += `\n[${summaryData.pronunciation}]`;
+                    
+                    span.innerText = displayText;
+                    
+                    // ⭐️ 중요: 소리내어 읽을 때는 군더더기 없이 '원문'만 읽게 몰래 저장해둠
+                    span.dataset.speakText = summaryData.text; 
                     
                     span.onclick = function() {
                         stopSpeech();
-                        const utterance = new SpeechSynthesisUtterance(this.innerText);
-                        utterance.lang = 'en-US';
+                        const utterance = new SpeechSynthesisUtterance(this.dataset.speakText);
+                        
+                        // 언어 자동 전환!
+                        utterance.lang = isJapaneseText(this.dataset.speakText) ? 'ja-JP' : 'en-US';
                         utterance.rate = parseFloat(speedSelect.value);
+                        
                         this.classList.add('highlight');
                         utterance.onend = () => this.classList.remove('highlight');
                         window.speechSynthesis.speak(utterance);
@@ -172,7 +192,7 @@
                     summaryContent.appendChild(p);
                 });
             } catch (error) {
-                summaryContent.innerHTML = `<p style="color:#d32f2f; font-weight:bold;">🚨 에러: ${error.message}<br>Render 환경변수에 GEMINI_API_KEY가 정확히 들어갔는지 확인해 주세요!</p>`;
+                summaryContent.innerHTML = `<p style="color:#d32f2f; font-weight:bold;">🚨 에러: ${error.message}</p>`;
             }
         }
 
@@ -198,8 +218,11 @@
                 targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
 
-            const utterance = new SpeechSynthesisUtterance(sentences[currentSentenceIndex]);
-            utterance.lang = 'en-US'; 
+            const textToSpeak = sentences[currentSentenceIndex];
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            
+            // 본문을 처음부터 자동 재생할 때도 언어 자동 감지
+            utterance.lang = isJapaneseText(textToSpeak) ? 'ja-JP' : 'en-US';
             utterance.rate = parseFloat(speedSelect.value); 
             
             utterance.onend = function() {

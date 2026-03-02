@@ -8,7 +8,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
-// 1. 구글 Vision API (사진 -> 글자 추출)
+// 1. 구글 Vision API (영어, 일본어 모두 인식하도록 힌트 추가!)
 app.post('/api/vision', async (req, res) => {
     try {
         const base64Image = req.body.image;
@@ -19,7 +19,7 @@ app.post('/api/vision', async (req, res) => {
             requests: [{
                 image: { content: base64Image },
                 features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
-                imageContext: { languageHints: ['en'] }
+                imageContext: { languageHints: ['en', 'ja'] } // 🇯🇵 일본어 힌트 추가!
             }]
         };
 
@@ -38,7 +38,7 @@ app.post('/api/vision', async (req, res) => {
     }
 });
 
-// 2. 구글 Gemini API (글자 -> 요약) - Gemini 2.5 Flash 버전으로 업그레이드!
+// 2. 구글 Gemini API (글자 -> 요약) 
 app.post('/api/summarize', async (req, res) => {
     try {
         const text = req.body.text;
@@ -48,11 +48,28 @@ app.post('/api/summarize', async (req, res) => {
             return res.status(500).json({ error: '서버에 GEMINI_API_KEY가 없습니다.' });
         }
 
-        const prompt = `다음 영어 텍스트를 바탕으로, 스피킹 섀도잉 연습을 위한 1줄짜리 영어 요약본을 초급, 중급, 고급 3가지 레벨로 작성해. 
-        반드시 {"beginner": "...", "intermediate": "...", "advanced": "..."} 형태의 JSON 데이터로만 대답해.
+        // 🤖 요약 시 원문, 번역, 발음을 따로 분리해서 달라고 꼼꼼하게 명령!
+        const prompt = `다음 텍스트가 영어인지 일본어인지 파악해서, 섀도잉 연습용 1줄 요약본을 초급, 중급, 고급 3단계로 작성해. 
+        반드시 아래 JSON 형식으로만 대답해.
+        {
+          "beginner": {
+            "text": "원어 문장", 
+            "translation": "한국어 번역", 
+            "pronunciation": "일본어일 경우 일본어 발음의 한국어 표기 (영어면 빈칸)"
+          },
+          "intermediate": {
+            "text": "원어 문장", 
+            "translation": "한국어 번역", 
+            "pronunciation": "일본어 발음 표기"
+          },
+          "advanced": {
+            "text": "원어 문장", 
+            "translation": "한국어 번역", 
+            "pronunciation": "일본어 발음 표기"
+          }
+        }
         텍스트: ${text}`;
 
-        // 👉 여기가 핵심! 1.5에서 2.5로 변경되었습니다.
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         
         const response = await fetch(endpoint, {
