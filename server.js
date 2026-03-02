@@ -3,6 +3,9 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
+// ⭐️ 빠졌던 바로 그 한 줄 추가!
+const port = process.env.PORT || 3000;
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
 
@@ -129,7 +132,7 @@ app.post('/api/translate', async (req, res) => {
     }
 });
 
-// 5. ⭐️ 신규: 구글 Gemini API (전체 본문 9개국어 번역)
+// 5. 구글 Gemini API (전체 본문 9개국어 번역)
 app.post('/api/translate-all', async (req, res) => {
     try {
         const { text, targetLang } = req.body;
