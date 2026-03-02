@@ -191,17 +191,24 @@
                 ['beginner', 'intermediate', 'advanced'].forEach(level => {
                     if (data[level]) {
                         const summaryData = data[level];
-                        let displayText = `${summaryData.text}\n${summaryData.translation}\n[${summaryData.pronunciation}]`;
+                        // ⭐️ undefined 방어 및 발음 유무에 따른 렌더링
+                        const transText = summaryData.translation || '번역을 불러오지 못했습니다.';
+                        let displayText = `${summaryData.text}\n${transText}`;
+                        
+                        if (summaryData.pronunciation && summaryData.pronunciation.trim() !== '') {
+                            displayText += `\n[${summaryData.pronunciation}]`;
+                        }
+                        
                         createSentenceUI(displayText, level, summaryContent, summaryData.text); 
                     }
                 });
             } catch (error) {
-                summaryContent.innerHTML = `🚨 에러 발생`;
+                summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다.`;
             }
         }
 
         function createSentenceUI(displayText, id, container, speakText = null) {
-            const actualSpeakText = speakText || displayText; 
+            const actualSpeakText = speakText || displayText.split('\n')[0]; // 소리낼 때는 무조건 첫 줄(원문)만!
             const cleanText = actualSpeakText.trim();
 
             const box = document.createElement('div');
@@ -233,7 +240,6 @@
                 myWordbook = myWordbook.filter(item => item.text !== text);
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
                 btnElement.classList.remove('saved');
-                alert("단어장에서 삭제되었습니다.");
                 return;
             }
 
@@ -246,10 +252,14 @@
                 });
                 const data = await res.json();
                 
+                // ⭐️ undefined 방어
+                const finalTranslation = data.translation || '번역을 불러오지 못했습니다.';
+                const finalPronunciation = data.pronunciation || '';
+
                 myWordbook.unshift({
                     text: text,
-                    translation: data.translation,
-                    pronunciation: data.pronunciation
+                    translation: finalTranslation,
+                    pronunciation: finalPronunciation
                 });
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
                 
@@ -257,7 +267,7 @@
                 btnElement.classList.add('saved');
             } catch (error) {
                 btnElement.innerText = '⭐️';
-                alert("저장에 실패했습니다.");
+                alert("저장에 실패했습니다. 다시 시도해주세요.");
             }
         }
 
@@ -272,10 +282,15 @@
                 const div = document.createElement('div');
                 div.className = 'word-item';
                 
+                // ⭐️ 발음이 빈칸이면 아예 안 그리도록 설정
+                const pronHtml = (item.pronunciation && item.pronunciation.trim() !== '') 
+                                 ? `<div class="word-pron">[${item.pronunciation}]</div>` 
+                                 : '';
+
                 div.innerHTML = `
                     <div class="word-text sentence" id="word-${index}">${item.text}</div>
                     <div class="word-trans">${item.translation}</div>
-                    <div class="word-pron">[${item.pronunciation}]</div>
+                    ${pronHtml}
                     <button class="delete-btn" onclick="deleteFromWordbook('${item.text}')">✖</button>
                 `;
                 
