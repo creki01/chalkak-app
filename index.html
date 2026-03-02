@@ -18,12 +18,13 @@
         .btn-orange { background: #ff9500; } 
         .btn-purple { background: #5856d6; } 
         
+        /* 2개 버튼을 한 줄로 꽉 차게 */
         .button-group { display: flex; gap: 8px; margin-bottom: 20px; }
-        .button-group .btn { flex: 1; margin-bottom: 0; padding: 15px 5px; font-size: 15px; }
+        .button-group .btn { flex: 1; margin-bottom: 0; padding: 18px 5px; font-size: 17px; }
 
         #preview { max-width: 100%; margin-top: 10px; border-radius: 12px; display: none; margin-bottom: 20px;}
         
-        #resultContainer, #wordbookContainer { text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #resultContainer { text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         #resultText { font-size: 16px; margin-bottom: 20px; color: #333; line-height: 1.8; border-bottom: 1px solid #eee; padding-bottom: 20px;}
         
         #summaryContainer { margin-top: 20px; text-align: left; background: #e3f2fd; padding: 20px; border-radius: 12px; display: none; }
@@ -63,17 +64,12 @@
             <h1 style="margin-top: 0;">📸 Sean speaking</h1>
             <p style="margin-bottom: 25px; color: #555;">원하는 입력 방식을 선택하세요!</p>
 
-            <!-- ✅ 수정 1: 카메라 → capture="camera" 로 변경 (iOS/Android 모두 카메라 강제 실행) -->
-            <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display: none;">
-
-            <!-- ✅ 수정 2: 갤러리 → capture 속성 완전 제거 (갤러리/사진첩만 열림) -->
+            <!-- 사진첩: capture 없음 → 갤러리/사진앱 선택 -->
             <input type="file" id="galleryInput" accept="image/*" style="display: none;">
-
-            <!-- ✅ 수정 3: 음성 → capture 없음 + accept를 넓게 설정 (파일 탐색기 열림) -->
+            <!-- 음성: audio만 허용 → 파일탐색기 -->
             <input type="file" id="audioInput" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" style="display: none;">
             
             <div class="button-group">
-                <button class="btn" onclick="document.getElementById('cameraInput').click()">📸 카메라</button>
                 <button class="btn btn-purple" onclick="document.getElementById('galleryInput').click()">🖼️ 사진첩</button>
                 <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 음성</button>
             </div>
@@ -127,7 +123,6 @@
     </div>
 
     <script>
-        const cameraInput = document.getElementById('cameraInput');
         const galleryInput = document.getElementById('galleryInput');
         const audioInput = document.getElementById('audioInput');
         
@@ -175,7 +170,6 @@
             const file = event.target.files[0];
             if (!file) return;
             stopSpeech();
-            
             event.target.value = '';
 
             const reader = new FileReader();
@@ -189,20 +183,17 @@
                     preview.src = result;
                     preview.style.display = 'block';
                     sendToVisionAPI(base64Data);
-                } 
-                else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg|aac|flac)$/i)) {
+                } else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg|aac|flac)$/i)) {
                     preview.style.display = 'none';
                     const mimeType = result.split(';')[0].split(':')[1] || 'audio/mp3';
                     sendToTranscribeAPI(base64Data, mimeType);
-                } 
-                else {
+                } else {
                     alert('지원하지 않는 파일 형식입니다. (사진 또는 음성 파일을 선택해주세요)');
                 }
             };
             reader.readAsDataURL(file); 
         }
 
-        cameraInput.addEventListener('change', handleFileSelect);
         galleryInput.addEventListener('change', handleFileSelect);
         audioInput.addEventListener('change', handleFileSelect);
 
@@ -217,7 +208,6 @@
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error);
-
                 const text = data.responses[0]?.fullTextAnnotation?.text;
                 handleExtractedText(text);
             } catch (error) {
@@ -237,7 +227,6 @@
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || '음성 추출 에러가 발생했습니다.');
-
                 handleExtractedText(data.text);
             } catch (error) {
                 resultText.innerText = '오류: ' + error.message;
@@ -249,7 +238,6 @@
             if (text && text.trim() !== "") {
                 originalExtractedText = text; 
                 document.getElementById('translateControl').style.display = 'block';
-                
                 renderSentences(text, resultText, "auto");
                 generateSummary(text);
             } else {
@@ -283,7 +271,6 @@
         function handleLanguageChange() {
             const langSelect = document.getElementById('langSelect');
             const targetLangCode = langSelect.value;
-            
             if (targetLangCode === 'original') {
                 restoreOriginalText();
             } else {
@@ -294,13 +281,10 @@
         async function translateMainText(targetLangCode, rawLangName) {
             if (!originalExtractedText) return;
             stopSpeech();
-            
             const cleanLangName = rawLangName.replace(/[^가-힣a-zA-Z]/g, '').trim().replace('로변환', '');
-
             loading.innerText = `⏳ 본문을 ${cleanLangName}로 변환 중입니다...`;
             loading.style.display = 'block';
             resultText.innerHTML = '';
-
             try {
                 const response = await fetch('/api/translate-all', {
                     method: 'POST',
@@ -308,9 +292,7 @@
                     body: JSON.stringify({ text: originalExtractedText, targetLang: cleanLangName })
                 });
                 const data = await response.json();
-                
                 if (!response.ok) throw new Error(data.error || '번역 실패');
-                
                 renderSentences(data.text, resultText, targetLangCode);
             } catch (error) {
                 resultText.innerText = "번역에 실패했습니다: " + error.message;
@@ -327,17 +309,14 @@
         function createSentenceUI(displayText, id, container, speakText = null, lang = "auto") {
             const actualSpeakText = speakText || displayText.split('\n')[0]; 
             const cleanText = actualSpeakText.trim();
-
             const box = document.createElement('div');
             box.className = 'sentence-box';
-
             const span = document.createElement('span');
             span.className = 'sentence';
             span.id = `sentence-${id}`;
             span.innerText = displayText.trim() + ' ';
             span.dataset.lang = lang; 
             span.onclick = function() { toggleLoop(cleanText, this); };
-
             const starBtn = document.createElement('button');
             starBtn.className = 'star-btn';
             starBtn.innerText = '⭐️';
@@ -345,7 +324,6 @@
                 starBtn.classList.add('saved');
             }
             starBtn.onclick = function() { toggleStar(cleanText, this, box); };
-
             box.appendChild(span);
             box.appendChild(starBtn);
             container.appendChild(box);
@@ -362,17 +340,14 @@
                 });
                 const data = await response.json();
                 summaryContent.innerHTML = '';
-                
                 ['beginner', 'intermediate', 'advanced'].forEach(level => {
                     if (data[level]) {
                         const summaryData = data[level];
                         const transText = summaryData.translation || '번역을 불러오지 못했습니다.';
                         let displayText = `${summaryData.text}\n${transText}`;
-                        
                         if (summaryData.pronunciation && summaryData.pronunciation.trim() !== '') {
                             displayText += `\n[${summaryData.pronunciation}]`;
                         }
-                        
                         createSentenceUI(displayText, level, summaryContent, summaryData.text, "auto"); 
                     }
                 });
@@ -385,14 +360,12 @@
 
         async function toggleStar(text, btnElement, boxElement) {
             const isSaved = myWordbook.some(item => item.text === text);
-            
             if (isSaved) {
                 myWordbook = myWordbook.filter(item => item.text !== text);
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
                 btnElement.classList.remove('saved');
                 return;
             }
-
             btnElement.innerText = '⏳'; 
             try {
                 const res = await fetch('/api/translate', {
@@ -401,17 +374,12 @@
                     body: JSON.stringify({ text: text })
                 });
                 const data = await res.json();
-                
-                const finalTranslation = data.translation || '번역을 불러오지 못했습니다.';
-                const finalPronunciation = data.pronunciation || '';
-
                 myWordbook.unshift({
                     text: text,
-                    translation: finalTranslation,
-                    pronunciation: finalPronunciation
+                    translation: data.translation || '번역을 불러오지 못했습니다.',
+                    pronunciation: data.pronunciation || ''
                 });
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
-                
                 btnElement.innerText = '⭐️';
                 btnElement.classList.add('saved');
             } catch (error) {
@@ -426,25 +394,18 @@
                 wordList.innerHTML = '<p style="color:#888;">아직 저장된 문장이 없습니다.<br>원하는 문장 옆 ⭐️를 눌러보세요!</p>';
                 return;
             }
-
             myWordbook.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = 'word-item';
-                
                 const pronHtml = (item.pronunciation && item.pronunciation.trim() !== '') 
-                                 ? `<div class="word-pron">[${item.pronunciation}]</div>` 
-                                 : '';
-
+                                 ? `<div class="word-pron">[${item.pronunciation}]</div>` : '';
                 div.innerHTML = `
                     <div class="word-text sentence" id="word-${index}" data-lang="auto">${item.text}</div>
                     <div class="word-trans">${item.translation}</div>
                     ${pronHtml}
                     <button class="delete-btn" onclick="deleteFromWordbook(${index})">✖</button>
                 `;
-                
-                const textSpan = div.querySelector('.word-text');
-                textSpan.onclick = function() { toggleLoop(item.text, this); };
-
+                div.querySelector('.word-text').onclick = function() { toggleLoop(item.text, this); };
                 wordList.appendChild(div);
             });
         }
@@ -469,11 +430,9 @@
         function speakLoop(text, element) {
             if (!isLooping || currentLoopTarget !== element) return;
             const utterance = new SpeechSynthesisUtterance(text);
-            
             const langAttr = element.dataset.lang || 'auto';
             utterance.lang = langAttr === 'auto' ? getLang(text) : langAttr;
             utterance.rate = parseFloat(speedSelect.value);
-            
             utterance.onend = function() {
                 if (isLooping && currentLoopTarget === element) {
                     setTimeout(() => speakLoop(text, element), 500);
@@ -499,11 +458,9 @@
             }
             const textToSpeak = sentences[sequentialIndex];
             const utterance = new SpeechSynthesisUtterance(textToSpeak);
-            
             const langAttr = targetSpan ? targetSpan.dataset.lang : 'auto';
             utterance.lang = langAttr === 'auto' ? getLang(textToSpeak) : langAttr;
             utterance.rate = parseFloat(speedSelect.value); 
-            
             utterance.onend = function() {
                 if (sequentialIndex >= 0) { sequentialIndex++; speakSequential(); }
             };
