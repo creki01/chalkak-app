@@ -12,12 +12,18 @@
         .nav-tab.active { color: #007aff; border-bottom: 3px solid #007aff; }
 
         .container { padding: 20px; }
-        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 10px; font-weight: bold;}
-        .btn-green { background: #34c759; } 
+        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 16px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: bold; transition: 0.2s;}
+        .btn:active { opacity: 0.8; }
+        .btn-green { background: #34c759; margin-bottom: 10px;} 
+        .btn-orange { background: #ff9500; } 
         
-        #preview { max-width: 100%; margin-top: 20px; border-radius: 12px; display: none; }
+        /* ⭐️ 두 버튼을 한 줄로 예쁘게 묶어주는 박스 */
+        .button-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .button-group .btn { flex: 1; margin-bottom: 0; padding: 18px 10px; }
+
+        #preview { max-width: 100%; margin-top: 10px; border-radius: 12px; display: none; margin-bottom: 20px;}
         
-        #resultContainer, #wordbookContainer { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #resultContainer, #wordbookContainer { text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         #resultText { font-size: 16px; margin-bottom: 20px; color: #333; line-height: 1.8; border-bottom: 1px solid #eee; padding-bottom: 20px;}
         
         #summaryContainer { margin-top: 20px; text-align: left; background: #e3f2fd; padding: 20px; border-radius: 12px; display: none; }
@@ -43,11 +49,6 @@
         
         #translateControl { background: #f1f3f5; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
         #langSelect { width: 100%; max-width: 250px; font-size: 16px; padding: 10px; font-weight: bold; border: 1px solid #ccc;}
-
-        /* ⭐️ 폰의 헷갈림을 막아줄 깔끔한 커스텀 팝업 디자인 */
-        #mediaModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 25px 20px; border-radius: 15px; width: 80%; max-width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
-        .modal-title { margin-top: 0; margin-bottom: 20px; color: #333; font-size: 18px; }
     </style>
 </head>
 <body>
@@ -57,29 +58,24 @@
         <div class="nav-tab" id="tabWordbook" onclick="switchTab('wordbook')">⭐️ 내 단어장</div>
     </div>
 
-    <div id="mediaModal">
-        <div class="modal-content">
-            <h3 class="modal-title">어떤 파일을 올리실 건가요?</h3>
-            <button class="btn" style="background:#007aff; margin-bottom:10px;" onclick="selectImage()">📷 사진 (갤러리/카메라)</button>
-            <button class="btn" style="background:#ff9500; margin-bottom:15px;" onclick="selectAudio()">🎵 음성 (녹음 파일)</button>
-            <button class="btn" style="background:#8e8e93; margin-bottom:0;" onclick="closeMediaModal()">취소</button>
-        </div>
-    </div>
-
     <div class="container">
         <div id="homeView">
-            <h1>📸 Sean speaking</h1>
-            <p>사진이나 녹음 파일을 올리면 텍스트 추출 & 요약까지!</p>
+            <h1 style="margin-top: 0;">📸 Sean speaking</h1>
+            <p style="margin-bottom: 25px; color: #555;">원하는 파일을 올려주세요!</p>
 
-            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <input type="file" id="imageInput" accept="image/jpeg, image/png, image/jpg" style="display: none;">
             <input type="file" id="audioInput" accept="audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
             
-            <button class="btn" onclick="openMediaModal()">📸 사진 / 🎵 음성 파일 올리기</button>
+            <div class="button-group">
+                <button class="btn" onclick="document.getElementById('imageInput').click()">📸 사진 찍기</button>
+                <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 음성 불러오기</button>
+            </div>
 
             <img id="preview" alt="미리보기">
             <div id="loading">⏳ 구글 AI가 작업 중입니다...</div>
             
             <div id="resultContainer">
+                
                 <div id="translateControl" style="display: none;">
                     <select id="langSelect" onchange="handleLanguageChange()">
                         <option value="original">🌐 원본 그대로 보기</option>
@@ -111,8 +107,8 @@
                         <option value="1.2">조금 빠르게 (1.2x)</option>
                     </select>
                 </div>
-                <button class="btn btn-green" onclick="playAllSpeech()">🔊 전체 처음부터 듣기</button>
-                <button class="btn" style="background-color: #8e8e93;" onclick="stopSpeech()">⏹️ 모든 발음 정지</button>
+                <button class="btn btn-green" style="width: 100%;" onclick="playAllSpeech()">🔊 전체 처음부터 듣기</button>
+                <button class="btn" style="background-color: #8e8e93; width: 100%;" onclick="stopSpeech()">⏹️ 모든 발음 정지</button>
             </div>
         </div>
 
@@ -143,22 +139,6 @@
         let originalExtractedText = "";
         let myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
 
-        // ⭐️ 팝업 제어 함수
-        function openMediaModal() {
-            document.getElementById('mediaModal').style.display = 'flex';
-        }
-        function closeMediaModal() {
-            document.getElementById('mediaModal').style.display = 'none';
-        }
-        function selectImage() {
-            closeMediaModal();
-            imageInput.click();
-        }
-        function selectAudio() {
-            closeMediaModal();
-            audioInput.click();
-        }
-
         function switchTab(tab) {
             stopSpeech();
             document.getElementById('tabHome').classList.remove('active');
@@ -182,13 +162,11 @@
             return 'en-US';
         }
 
-        // ⭐️ 파일 선택 공통 로직
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
             stopSpeech();
             
-            // 똑같은 파일을 다시 올릴 때도 인식하도록 초기화
             event.target.value = '';
 
             const reader = new FileReader();
