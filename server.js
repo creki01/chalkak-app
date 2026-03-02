@@ -8,6 +8,12 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
+// 👇👇👇 새로 추가할 부분: 기본 주소로 들어오면 무조건 index.html을 띄워라!
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+// 👆👆👆
+
 // 1. 구글 Vision API
 app.post('/api/vision', async (req, res) => {
     try {
