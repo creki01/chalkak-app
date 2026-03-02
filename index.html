@@ -42,7 +42,6 @@
         .word-pron { color: #888; font-size: 13px; }
         .delete-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 16px; color: #ff3b30; cursor: pointer; }
         
-        /* ⭐️ 다국어 변환기 디자인 */
         #translateControl { background: #f1f3f5; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
         .mini-btn { padding: 8px 12px; font-size: 14px; border-radius: 6px; cursor: pointer; border: none; color: white; margin-left: 5px; }
     </style>
@@ -62,7 +61,7 @@
             <input type="file" id="imageInput" accept="image/*" style="display: none;">
             <button class="btn" onclick="document.getElementById('imageInput').click()">📷 사진 찍기 / 갤러리 선택</button>
 
-            <input type="file" id="audioInput" accept="audio/*" style="display: none;">
+            <input type="file" id="audioInput" accept="audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
             <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 녹음/음성 파일 불러오기</button>
 
             <img id="preview" alt="미리보기">
@@ -132,9 +131,7 @@
         let isLooping = false; 
         let currentLoopTarget = null; 
 
-        // ⭐️ 원본 텍스트 보존용 변수
         let originalExtractedText = "";
-
         let myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
 
         function switchTab(tab) {
@@ -229,7 +226,7 @@
 
         function handleExtractedText(text) {
             if (text && text.trim() !== "") {
-                originalExtractedText = text; // 원본 보존
+                originalExtractedText = text; 
                 document.getElementById('translateControl').style.display = 'block';
                 
                 renderSentences(text, resultText, "auto");
@@ -240,7 +237,6 @@
             }
         }
 
-        // ⭐️ 화면에 문장 조각조각 뿌려주는 함수 (번역기에서도 재사용)
         function renderSentences(text, container, langType = "auto") {
             container.innerHTML = '';
             sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
@@ -263,7 +259,6 @@
             resultContainer.style.display = 'block';
         }
 
-        // ⭐️ 신규: 다국어 전체 번역 요청 함수
         async function translateMainText() {
             if (!originalExtractedText) return;
             stopSpeech();
@@ -284,22 +279,22 @@
                 });
                 const data = await response.json();
                 
-                // 번역 완료 후 화면에 뿌리기 (발음 엔진도 해당 국가로 강제 지정!)
+                if (!response.ok) throw new Error(data.error || '번역 실패');
+                
                 renderSentences(data.text, resultText, targetLangCode);
             } catch (error) {
-                resultText.innerText = "번역에 실패했습니다.";
+                // ⭐️ 오류 메시지를 더 구체적으로 보여주도록 수정
+                resultText.innerText = "번역에 실패했습니다: " + error.message;
             } finally {
                 loading.style.display = 'none';
             }
         }
 
-        // ⭐️ 신규: 다시 원본으로 돌아가는 함수
         function restoreOriginalText() {
             stopSpeech();
             renderSentences(originalExtractedText, resultText, "auto");
         }
 
-        // ⭐️ 수정: 문장 생성 시 성우(언어) 정보도 태그 안에 숨겨두기
         function createSentenceUI(displayText, id, container, speakText = null, lang = "auto") {
             const actualSpeakText = speakText || displayText.split('\n')[0]; 
             const cleanText = actualSpeakText.trim();
@@ -311,7 +306,7 @@
             span.className = 'sentence';
             span.id = `sentence-${id}`;
             span.innerText = displayText.trim() + ' ';
-            span.dataset.lang = lang; // 👈 여기에 국가 코드 저장
+            span.dataset.lang = lang; 
             span.onclick = function() { toggleLoop(cleanText, this); };
 
             const starBtn = document.createElement('button');
@@ -349,13 +344,12 @@
                             displayText += `\n[${summaryData.pronunciation}]`;
                         }
                         
-                        // 요약본은 무조건 자동 감지로 읽게 "auto" 부여
                         createSentenceUI(displayText, level, summaryContent, summaryData.text, "auto"); 
                     }
                 });
                 finishLoading();
             } catch (error) {
-                summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다.`;
+                summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다. (원문 내 특정 단어가 검열되었을 수 있습니다.)`;
                 finishLoading();
             }
         }
@@ -447,7 +441,6 @@
             if (!isLooping || currentLoopTarget !== element) return;
             const utterance = new SpeechSynthesisUtterance(text);
             
-            // ⭐️ 태그에 숨겨둔 언어 코드 확인 (auto면 자동 감지, 아니면 해당 언어 강제 지정)
             const langAttr = element.dataset.lang || 'auto';
             utterance.lang = langAttr === 'auto' ? getLang(text) : langAttr;
             utterance.rate = parseFloat(speedSelect.value);
