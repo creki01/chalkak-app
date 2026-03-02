@@ -38,19 +38,18 @@ app.post('/api/vision', async (req, res) => {
     }
 });
 
-// 2. 구글 Gemini API (글자 -> 3단계 요약 자동 생성)
+// 2. 구글 Gemini API (글자 -> 요약) - 철통 방어 모드!
 app.post('/api/summarize', async (req, res) => {
     try {
         const text = req.body.text;
-        const apiKey = process.env.GEMINI_API_KEY; // 새로 추가한 AI 키
+        const apiKey = process.env.GEMINI_API_KEY;
 
-        // AI에게 내릴 명령(프롬프트)
-        const prompt = `다음 영어 텍스트를 바탕으로, 스피킹 섀도잉 연습을 위한 1~2줄짜리 영어 요약본을 초급, 중급, 고급 3가지 레벨로 작성해. 응답은 반드시 아래 JSON 형식으로만 보내.
-        {
-          "beginner": "초급 문장",
-          "intermediate": "중급 문장",
-          "advanced": "고급 문장"
+        if (!apiKey) {
+            return res.status(500).json({ error: '서버에 GEMINI_API_KEY가 없습니다.' });
         }
+
+        const prompt = `다음 영어 텍스트를 바탕으로, 스피킹 섀도잉 연습을 위한 1줄짜리 영어 요약본을 초급, 중급, 고급 3가지 레벨로 작성해. 
+        반드시 {"beginner": "...", "intermediate": "...", "advanced": "..."} 형태의 JSON 데이터로만 대답해.
         텍스트: ${text}`;
 
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
@@ -58,19 +57,25 @@ app.post('/api/summarize', async (req, res) => {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            body: JSON.stringify({ 
+                contents: [{ parts: [{ text: prompt }] }],
+                // Gemini에게 딴소리 금지, JSON만 주도록 강제!
+                generationConfig: { responseMimeType: "application/json" } 
+            })
         });
 
         const data = await response.json();
-        const aiText = data.candidates[0].content.parts[0].text;
         
-        // 지저분한 문자열을 깔끔한 데이터로 정리해서 프론트엔드로 전달
-        const cleanJson = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(cleanJson));
+        if (!response.ok) {
+            return res.status(500).json({ error: 'Gemini API 호출 에러' });
+        }
+
+        const aiText = data.candidates[0].content.parts[0].text;
+        res.json(JSON.parse(aiText));
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: '요약 에러' });
+        res.status(500).json({ error: 'AI 요약본 생성 중 문제가 발생했습니다.' });
     }
 });
 
