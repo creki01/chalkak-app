@@ -13,7 +13,6 @@
         #resultContainer { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         #resultText { font-size: 16px; margin-bottom: 20px; color: #333; line-height: 1.8; border-bottom: 1px solid #eee; padding-bottom: 20px;}
         
-        /* ⭐️ 새로 추가된 요약본 디자인 */
         #summaryContainer { margin-top: 20px; text-align: left; background: #e3f2fd; padding: 20px; border-radius: 12px; display: none; }
         #summaryContainer h3 { margin-top: 0; color: #0d47a1; font-size: 18px;}
         
@@ -88,7 +87,6 @@
             reader.readAsDataURL(file); 
         });
 
-        // 1. 글자 읽어오기
         async function sendToVisionAPI(base64Image) {
             loading.innerText = '⏳ 사진에서 글자를 읽고 있습니다...';
             loading.style.display = 'block';
@@ -119,7 +117,6 @@
                         resultText.appendChild(span);
                     });
                     
-                    // 글자를 성공적으로 뽑았다면, 이어서 요약본 만들기 시작!
                     generateSummary(text);
                 } else {
                     resultText.innerText = '글자를 찾지 못했어요.';
@@ -132,7 +129,6 @@
             }
         }
 
-        // 2. 글자 요약하기 (새로 추가됨!)
         async function generateSummary(text) {
             summaryContainer.style.display = 'block';
             summaryContent.innerHTML = '⏳ AI가 수준별 요약본을 만들고 있습니다...';
@@ -144,6 +140,9 @@
                     body: JSON.stringify({ text: text })
                 });
                 const data = await response.json();
+                
+                // 🚨 에러 체크 추가: 실패 시 undefined 말고 진짜 에러 메시지 출력
+                if (!response.ok) throw new Error(data.error || '요약본 생성 실패');
                 
                 summaryContent.innerHTML = '';
                 const levels = [
@@ -159,7 +158,6 @@
                     span.className = 'sentence';
                     span.innerText = data[lvl.key];
                     
-                    // 요약본 터치 시 읽어주는 기능
                     span.onclick = function() {
                         stopSpeech();
                         const utterance = new SpeechSynthesisUtterance(this.innerText);
@@ -174,7 +172,7 @@
                     summaryContent.appendChild(p);
                 });
             } catch (error) {
-                summaryContent.innerHTML = '요약본을 생성하는 데 문제가 발생했습니다.';
+                summaryContent.innerHTML = `<p style="color:#d32f2f; font-weight:bold;">🚨 에러: ${error.message}<br>Render 환경변수에 GEMINI_API_KEY가 정확히 들어갔는지 확인해 주세요!</p>`;
             }
         }
 
