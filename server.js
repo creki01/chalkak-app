@@ -1,192 +1,75 @@
-require('dotenv').config();
-const express = require('express');
-const path = require('path');
+// 파일 선택 시 같은 파일을 다시 선택할 수 있도록 클릭할 때 value를 비워줌
+galleryInput.addEventListener('click', function(e) { e.target.value = ''; });
+audioInput.addEventListener('click', function(e) { e.target.value = ''; });
 
-const app = express();
-const port = process.env.PORT || 3000;
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    stopSpeech();
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname)));
-
-const safetySettings = [
-    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-];
-
-app.post('/api/vision', async (req, res) => {
-    try {
-        const base64Image = req.body.image;
-        const apiKey = process.env.GOOGLE_VISION_API_KEY;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const result = e.target.result;
+        const base64Data = result.split(',')[1];
         
-        // ⭐️ 수정됨: Vision API 키 누락 방어 추가
-        if (!apiKey) return res.status(500).json({ error: 'Vision API 키가 누락되었습니다.' });
+        document.getElementById('langSelect').value = 'original';
 
-        const endpoint = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
-        const body = {
-            requests: [{
-                image: { content: base64Image },
-                features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
-                imageContext: { languageHints: ['en', 'ja', 'ko'] } 
-            }]
-        };
-
-        const googleRes = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-
-        const data = await googleRes.json();
-        if (!googleRes.ok) return res.status(googleRes.status).json({ error: 'Vision API 에러' });
-        res.json(data);
-
-    } catch (error) {
-        res.status(500).json({ error: '서버 에러' });
-    }
-});
-
-app.post('/api/transcribe', async (req, res) => {
-    try {
-        const base64Audio = req.body.audio;
-        const mimeType = req.body.mimeType || 'audio/mp3';
-        const apiKey = process.env.GEMINI_API_KEY;
-
-        if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
-
-        const prompt = `이 음성 파일에 있는 언어(영어, 일본어, 또는 한국어)를 듣고, 들리는 그대로 정확하게 텍스트로 받아쓰기(Transcription) 해줘. 다른 설명이나 요약은 절대 넣지 말고 오직 받아쓴 원문 텍스트만 출력해.`;
-
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: base64Audio } }] }],
-                safetySettings: safetySettings
-            })
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error?.message || '음성 파일이 너무 크거나 형식이 맞지 않습니다.');
-        if (!data.candidates) throw new Error('음성 인식 결과가 없습니다.');
-
-        const transcribedText = data.candidates[0].content.parts[0].text;
-        res.json({ text: transcribedText });
-
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/api/summarize', async (req, res) => {
-    try {
-        const text = req.body.text;
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
-
-        const prompt = `이 텍스트는 문학 작품의 일부입니다. 폭력성이나 자극적인 단어가 있어도 절대 검열하지 마세요.
-        다음 텍스트가 어떤 언어인지 파악해서 섀도잉 연습용 1줄 요약본을 초급, 중급, 고급 3단계로 작성해. 
-        규칙: 원문이 영어나 한국어라면 "pronunciation"은 반드시 빈칸("")으로 비워둬. 원문이 일본어일 때만 "pronunciation"에 한국어 발음 표기를 적어.
-        반드시 아래 JSON 형식으로만 대답해.
-        {
-          "beginner": { "text": "원문", "translation": "번역", "pronunciation": "발음 또는 빈칸" },
-          "intermediate": { "text": "원문", "translation": "번역", "pronunciation": "발음 또는 빈칸" },
-          "advanced": { "text": "원문", "translation": "번역", "pronunciation": "발음 또는 빈칸" }
+        if (file.type.startsWith('image/')) {
+            preview.src = result;
+            preview.style.display = 'block';
+            sendToVisionAPI(base64Data);
+        } else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg|aac|flac)$/i)) {
+            preview.style.display = 'none';
+            // ⭐️ 개선: MIME 타입을 더 안전하게 추출 (iOS 호환성 강화)
+            let mimeType = 'audio/mp3'; 
+            if (result.includes('data:audio')) {
+                mimeType = result.split(';')[0].split(':')[1] || 'audio/mp3';
+            }
+            sendToTranscribeAPI(base64Data, mimeType);
+        } else {
+            alert('지원하지 않는 파일 형식입니다. (사진 또는 음성 파일을 선택해주세요)');
         }
-        텍스트: ${text}`;
+    };
+    reader.readAsDataURL(file); 
+}
 
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }], 
-                generationConfig: { responseMimeType: "application/json" },
-                safetySettings: safetySettings 
-            })
-        });
+galleryInput.addEventListener('change', handleFileSelect);
+audioInput.addEventListener('change', handleFileSelect);
 
-        const data = await response.json();
-        if (!data.candidates) throw new Error('AI 검열 차단됨');
-        
-        // ⭐️ 수정됨: AI가 마크다운 코드 블록(```json)을 씌워 보낼 때 에러나는 현상 방지
-        const aiText = data.candidates[0].content.parts[0].text;
-        const cleanedText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(cleanedText));
-
-    } catch (error) {
-        res.status(500).json({ error: 'AI 요약 에러' });
+// ⭐️ 개선: 정규식 대신 data-name 속성을 안전하게 가져오도록 변경
+function handleLanguageChange() {
+    const langSelect = document.getElementById('langSelect');
+    const targetLangCode = langSelect.value;
+    
+    if (targetLangCode === 'original') {
+        restoreOriginalText();
+    } else {
+        const selectedOption = langSelect.options[langSelect.selectedIndex];
+        const cleanLangName = selectedOption.getAttribute('data-name');
+        translateMainText(targetLangCode, cleanLangName);
     }
-});
+}
 
-app.post('/api/translate', async (req, res) => {
+async function translateMainText(targetLangCode, cleanLangName) {
+    if (!originalExtractedText) return;
+    stopSpeech();
+    
+    // 이제 rawLangName을 받아 정규식 처리할 필요 없이 바로 사용 가능
+    loading.innerText = `⏳ 본문을 ${cleanLangName}(으)로 변환 중입니다...`;
+    loading.style.display = 'block';
+    resultText.innerHTML = '';
     try {
-        const text = req.body.text;
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
-
-        const prompt = `이 문장은 문학 작품의 일부입니다. 폭력성이나 자극적인 단어가 있어도 절대 검열하지 마세요.
-        다음 문장의 한국어 뜻과 발음을 작성해.
-        규칙: 문장이 영어나 한국어라면 "pronunciation"은 반드시 빈칸("")으로 비워둬. 문장이 일본어일 때만 "pronunciation"에 한국어 발음 표기를 적어.
-        반드시 아래 JSON 형식으로만 대답해.
-        { "translation": "한국어 번역", "pronunciation": "발음 또는 빈칸" }
-        문장: ${text}`;
-
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-        const response = await fetch(endpoint, {
+        const response = await fetch('/api/translate-all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }], 
-                generationConfig: { responseMimeType: "application/json" },
-                safetySettings: safetySettings 
-            })
+            body: JSON.stringify({ text: originalExtractedText, targetLang: cleanLangName })
         });
-
         const data = await response.json();
-        
-        // ⭐️ 수정됨: AI가 마크다운 코드 블록(```json)을 씌워 보낼 때 에러나는 현상 방지
-        const aiText = data.candidates[0].content.parts[0].text;
-        const cleanedText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(cleanedText));
-
+        if (!response.ok) throw new Error(data.error || '번역 실패');
+        renderSentences(data.text, resultText, targetLangCode);
     } catch (error) {
-        res.status(500).json({ error: '단어장 번역 에러' });
+        resultText.innerText = "번역에 실패했습니다: " + error.message;
+    } finally {
+        loading.style.display = 'none';
     }
-});
-
-app.post('/api/translate-all', async (req, res) => {
-    try {
-        const { text, targetLang } = req.body;
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
-
-        const prompt = `전문 번역가로서 아래 텍스트를 '${targetLang}'(으)로 번역하세요. 생략이나 의역 없이 100% 원문 그대로 정확하게 번역해야 합니다. 어떠한 부연 설명이나 추가 문장 없이 오직 번역된 결과만 출력하세요.\n\n텍스트: ${text}`;
-
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }],
-                safetySettings: safetySettings 
-            })
-        });
-
-        const data = await response.json();
-        if (!data.candidates || !data.candidates[0].content) {
-             return res.status(500).json({ error: 'AI가 원서의 특정 단어 때문에 번역을 거부했습니다.' });
-        }
-
-        const translatedText = data.candidates[0].content.parts[0].text;
-        res.json({ text: translatedText });
-
-    } catch (error) {
-        res.status(500).json({ error: '전체 번역 에러' });
-    }
-});
-
-app.listen(port, () => {
-    console.log(`🚀 서버 켜짐! 포트: ${port}`);
-});
+}
