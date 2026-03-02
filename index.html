@@ -12,10 +12,14 @@
         .nav-tab.active { color: #007aff; border-bottom: 3px solid #007aff; }
 
         .container { padding: 20px; }
-        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: bold; margin-bottom: 12px; transition: 0.2s;}
+        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 16px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: bold; transition: 0.2s;}
         .btn:active { opacity: 0.8; }
         .btn-green { background: #34c759; margin-bottom: 10px;} 
         .btn-orange { background: #ff9500; } 
+        .btn-purple { background: #5856d6; } 
+        
+        .button-group { display: flex; gap: 8px; margin-bottom: 20px; }
+        .button-group .btn { flex: 1; margin-bottom: 0; padding: 15px 5px; font-size: 15px; }
 
         #preview { max-width: 100%; margin-top: 10px; border-radius: 12px; display: none; margin-bottom: 20px;}
         
@@ -59,11 +63,20 @@
             <h1 style="margin-top: 0;">📸 Sean speaking</h1>
             <p style="margin-bottom: 25px; color: #555;">원하는 입력 방식을 선택하세요!</p>
 
-            <input type="file" id="imageInput" accept="image/*" style="display: none;">
-            <button class="btn" onclick="document.getElementById('imageInput').click()">📸 사진 찍기 / 갤러리 선택</button>
+            <!-- ✅ 수정 1: 카메라 → capture="camera" 로 변경 (iOS/Android 모두 카메라 강제 실행) -->
+            <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display: none;">
 
-            <input type="file" id="audioInput" accept="audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
-            <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 녹음 / 음성 파일 불러오기</button>
+            <!-- ✅ 수정 2: 갤러리 → capture 속성 완전 제거 (갤러리/사진첩만 열림) -->
+            <input type="file" id="galleryInput" accept="image/*" style="display: none;">
+
+            <!-- ✅ 수정 3: 음성 → capture 없음 + accept를 넓게 설정 (파일 탐색기 열림) -->
+            <input type="file" id="audioInput" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" style="display: none;">
+            
+            <div class="button-group">
+                <button class="btn" onclick="document.getElementById('cameraInput').click()">📸 카메라</button>
+                <button class="btn btn-purple" onclick="document.getElementById('galleryInput').click()">🖼️ 사진첩</button>
+                <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 음성</button>
+            </div>
 
             <img id="preview" alt="미리보기">
             <div id="loading">⏳ 구글 AI가 작업 중입니다...</div>
@@ -114,8 +127,10 @@
     </div>
 
     <script>
-        const imageInput = document.getElementById('imageInput');
+        const cameraInput = document.getElementById('cameraInput');
+        const galleryInput = document.getElementById('galleryInput');
         const audioInput = document.getElementById('audioInput');
+        
         const preview = document.getElementById('preview');
         const resultContainer = document.getElementById('resultContainer');
         const resultText = document.getElementById('resultText');
@@ -156,39 +171,40 @@
             return 'en-US';
         }
 
-        // ⭐️ 사진 업로드 처리 (원상복구)
-        imageInput.addEventListener('change', function(event) {
+        function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
             stopSpeech();
-            document.getElementById('langSelect').value = 'original';
+            
+            event.target.value = '';
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                preview.src = e.target.result;
-                preview.style.display = 'block';
-                const base64Image = e.target.result.split(',')[1]; 
-                sendToVisionAPI(base64Image);
+                const result = e.target.result;
+                const base64Data = result.split(',')[1];
+                
+                document.getElementById('langSelect').value = 'original';
+
+                if (file.type.startsWith('image/')) {
+                    preview.src = result;
+                    preview.style.display = 'block';
+                    sendToVisionAPI(base64Data);
+                } 
+                else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg|aac|flac)$/i)) {
+                    preview.style.display = 'none';
+                    const mimeType = result.split(';')[0].split(':')[1] || 'audio/mp3';
+                    sendToTranscribeAPI(base64Data, mimeType);
+                } 
+                else {
+                    alert('지원하지 않는 파일 형식입니다. (사진 또는 음성 파일을 선택해주세요)');
+                }
             };
             reader.readAsDataURL(file); 
-        });
+        }
 
-        // ⭐️ 오디오 업로드 처리 (원상복구)
-        audioInput.addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            stopSpeech();
-            preview.style.display = 'none';
-            document.getElementById('langSelect').value = 'original';
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const base64Data = e.target.result.split(',')[1];
-                const mimeType = e.target.result.split(';')[0].split(':')[1] || 'audio/mp3';
-                sendToTranscribeAPI(base64Data, mimeType);
-            };
-            reader.readAsDataURL(file); 
-        });
+        cameraInput.addEventListener('change', handleFileSelect);
+        galleryInput.addEventListener('change', handleFileSelect);
+        audioInput.addEventListener('change', handleFileSelect);
 
         async function sendToVisionAPI(base64Image) {
             loading.innerText = '⏳ 사진에서 글자를 읽고 있습니다...';
