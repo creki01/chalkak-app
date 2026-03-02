@@ -14,6 +14,8 @@
         .container { padding: 20px; }
         .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 10px;}
         .btn-green { background: #34c759; } 
+        .btn-orange { background: #ff9500; } 
+        
         #preview { max-width: 100%; margin-top: 20px; border-radius: 12px; display: none; }
         
         #resultContainer, #wordbookContainer { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
@@ -51,13 +53,16 @@
     <div class="container">
         <div id="homeView">
             <h1>📸 Sean speaking</h1>
-            <p>사진을 찍으면 텍스트 추출 & 요약까지! (한/영/일 지원)</p>
+            <p>사진이나 녹음 파일을 올리면 텍스트 추출 & 요약까지!</p>
 
             <input type="file" id="imageInput" accept="image/*" style="display: none;">
-            <button class="btn" onclick="document.getElementById('imageInput').click()">사진 찍기 / 갤러리 선택</button>
+            <button class="btn" onclick="document.getElementById('imageInput').click()">📷 사진 찍기 / 갤러리 선택</button>
+
+            <input type="file" id="audioInput" accept="audio/*" style="display: none;">
+            <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 녹음/음성 파일 불러오기</button>
 
             <img id="preview" alt="미리보기">
-            <div id="loading">⏳ 구글 AI가 글자를 읽고 있습니다...</div>
+            <div id="loading">⏳ 구글 AI가 작업 중입니다...</div>
             
             <div id="resultContainer">
                 <div id="resultText"></div>
@@ -90,6 +95,7 @@
 
     <script>
         const imageInput = document.getElementById('imageInput');
+        const audioInput = document.getElementById('audioInput');
         const preview = document.getElementById('preview');
         const resultContainer = document.getElementById('resultContainer');
         const resultText = document.getElementById('resultText');
@@ -123,8 +129,14 @@
             }
         }
 
-        function isJapaneseText(text) {
-            return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(text);
+        // ⭐️ 한/영/일 언어 자동 감지 함수
+        function getLang(text) {
+            // 히라가나, 가타카나가 섞여 있으면 일본어로 간주
+            if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
+            // 한글이 섞여 있으면 한국어로 간주
+            if (/[가-힣]/.test(text)) return 'ko-KR';
+            // 그 외에는 기본 영어로 간주
+            return 'en-US';
         }
 
         imageInput.addEventListener('change', function(event) {
@@ -142,38 +154,82 @@
 
         async function sendToVisionAPI(base64Image) {
             loading.innerText = '⏳ 사진에서 글자를 읽고 있습니다...';
-            loading.style.display = 'block';
-            resultContainer.style.display = 'none';
-            summaryContainer.style.display = 'none';
-            resultText.innerHTML = '';
-            sentences = [];
-
+            startLoading();
             try {
                 const response = await fetch('/api/vision', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image: base64Image })
                 });
-
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error);
 
                 const text = data.responses[0]?.fullTextAnnotation?.text;
-                if (text) {
-                    sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
-                    sentences.forEach((sentence, index) => {
-                        createSentenceUI(sentence, index, resultText);
-                    });
-                    generateSummary(text);
-                } else {
-                    resultText.innerText = '글자를 찾지 못했어요.';
-                }
+                handleExtractedText(text);
             } catch (error) {
                 resultText.innerText = '오류: ' + error.message;
-            } finally {
-                loading.style.display = 'none';
-                resultContainer.style.display = 'block';
+                finishLoading();
             }
+        }
+
+        audioInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            stopSpeech();
+            preview.style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Data = e.target.result.split(',')[1];
+                const mimeType = e.target.result.split(';')[0].split(':')[1]; 
+                sendToTranscribeAPI(base64Data, mimeType);
+            };
+            reader.readAsDataURL(file); 
+        });
+
+        async function sendToTranscribeAPI(base64Audio, mimeType) {
+            loading.innerText = '⏳ 음성 파일을 듣고 글자로 받아쓰고 있습니다...\n(길이에 따라 10~20초 소요될 수 있습니다)';
+            startLoading();
+            try {
+                const response = await fetch('/api/transcribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio: base64Audio, mimeType: mimeType })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+
+                handleExtractedText(data.text);
+            } catch (error) {
+                resultText.innerText = '오류: ' + error.message;
+                finishLoading();
+            }
+        }
+
+        function handleExtractedText(text) {
+            if (text && text.trim() !== "") {
+                sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
+                sentences.forEach((sentence, index) => {
+                    createSentenceUI(sentence, index, resultText);
+                });
+                generateSummary(text);
+            } else {
+                resultText.innerText = '글자를 찾지 못했어요.';
+                finishLoading();
+            }
+        }
+
+        function startLoading() {
+            loading.style.display = 'block';
+            resultContainer.style.display = 'none';
+            summaryContainer.style.display = 'none';
+            resultText.innerHTML = '';
+            sentences = [];
+        }
+
+        function finishLoading() {
+            loading.style.display = 'none';
+            resultContainer.style.display = 'block';
         }
 
         async function generateSummary(text) {
@@ -201,8 +257,10 @@
                         createSentenceUI(displayText, level, summaryContent, summaryData.text); 
                     }
                 });
+                finishLoading();
             } catch (error) {
                 summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다.`;
+                finishLoading();
             }
         }
 
@@ -284,7 +342,6 @@
                                  ? `<div class="word-pron">[${item.pronunciation}]</div>` 
                                  : '';
 
-                // ⭐️ 핵심 수정 부분: 텍스트 대신 '인덱스 번호(순서)'를 전달해서 지우게 만듦
                 div.innerHTML = `
                     <div class="word-text sentence" id="word-${index}">${item.text}</div>
                     <div class="word-trans">${item.translation}</div>
@@ -299,10 +356,9 @@
             });
         }
 
-        // ⭐️ 핵심 수정 부분: 순서를 받아서 해당 순서의 데이터를 쏙 빼냅니다.
         function deleteFromWordbook(index) {
             if(confirm("이 문장을 단어장에서 삭제할까요?")) {
-                myWordbook.splice(index, 1); // 배열에서 그 번호에 해당하는 문장 1개를 삭제
+                myWordbook.splice(index, 1); 
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
                 renderWordbook(); 
             }
@@ -320,8 +376,11 @@
         function speakLoop(text, element) {
             if (!isLooping || currentLoopTarget !== element) return;
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = isJapaneseText(text) ? 'ja-JP' : 'en-US';
+            
+            // ⭐️ 한국어/영어/일본어 자동 감지 적용!
+            utterance.lang = getLang(text);
             utterance.rate = parseFloat(speedSelect.value);
+            
             utterance.onend = function() {
                 if (isLooping && currentLoopTarget === element) {
                     setTimeout(() => speakLoop(text, element), 500);
@@ -345,9 +404,13 @@
                 targetSpan.classList.add('highlight');
                 targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-            const utterance = new SpeechSynthesisUtterance(sentences[sequentialIndex]);
-            utterance.lang = isJapaneseText(sentences[sequentialIndex]) ? 'ja-JP' : 'en-US';
+            const textToSpeak = sentences[sequentialIndex];
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            
+            // ⭐️ 한국어/영어/일본어 자동 감지 적용!
+            utterance.lang = getLang(textToSpeak);
             utterance.rate = parseFloat(speedSelect.value); 
+            
             utterance.onend = function() {
                 if (sequentialIndex >= 0) { sequentialIndex++; speakSequential(); }
             };
