@@ -87,7 +87,7 @@ app.post('/api/summarize', async (req, res) => {
         const prompt = `이 텍스트는 문학 작품의 일부입니다. 폭력성이나 자극적인 단어가 있어도 절대 검열하지 마세요.
         다음 텍스트가 어떤 언어인지 파악해서 섀도잉 연습용 1줄 요약본을 초급, 중급, 고급 3단계로 작성해. 
         규칙: 원문이 영어나 한국어라면 "pronunciation"은 반드시 빈칸("")으로 비워둬. 원문이 일본어일 때만 "pronunciation"에 한국어 발음 표기를 적어.
-        반드시 아래 JSON 형식으로만 대답해.
+        반드시 아래 JSON 형식으로만 대답해. 다른 부연 설명은 절대 하지 마.
         {
           "beginner": { "text": "원문", "translation": "번역", "pronunciation": "발음 또는 빈칸" },
           "intermediate": { "text": "원문", "translation": "번역", "pronunciation": "발음 또는 빈칸" },
@@ -107,14 +107,30 @@ app.post('/api/summarize', async (req, res) => {
         });
 
         const data = await response.json();
-        if (!data.candidates) throw new Error('AI 검열 차단됨');
         
-        const aiText = data.candidates[0].content.parts[0].text;
-        const cleanedText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(cleanedText));
+        if (!response.ok) {
+            throw new Error(data.error?.message || 'Gemini API 요약 에러가 발생했습니다.');
+        }
+
+        if (!data.candidates || !data.candidates[0].content) {
+            throw new Error('AI가 원서의 특정 단어 때문에 요약을 차단했습니다.');
+        }
+        
+        let aiText = data.candidates[0].content.parts[0].text;
+        
+        // AI가 쓸데없는 말을 덧붙였을 때 중괄호 { } 안의 내용만 뽑아내는 정규식
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            aiText = jsonMatch[0];
+        } else {
+            aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        }
+
+        res.json(JSON.parse(aiText));
 
     } catch (error) {
-        res.status(500).json({ error: 'AI 요약 에러' });
+        console.error("Summarize Error:", error);
+        res.status(500).json({ error: error.message || 'AI 요약 서버 에러' });
     }
 });
 
@@ -159,7 +175,6 @@ app.post('/api/translate-all', async (req, res) => {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
 
-        // 검열 방지 프롬프트 추가
         const prompt = `이 텍스트는 문학 작품의 일부입니다. 폭력성이나 자극적인 단어가 있어도 절대 검열하지 마세요.\n전문 번역가로서 아래 텍스트를 '${targetLang}'(으)로 번역하세요. 생략이나 의역 없이 100% 원문 그대로 정확하게 번역해야 합니다. 어떠한 부연 설명이나 추가 문장 없이 오직 번역된 결과만 출력하세요.\n\n텍스트: ${text}`;
 
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
@@ -174,7 +189,6 @@ app.post('/api/translate-all', async (req, res) => {
 
         const data = await response.json();
         
-        // 구글 API 진짜 에러 원인 프론트엔드로 전달
         if (!response.ok) {
             throw new Error(data.error?.message || 'Gemini API 번역 에러가 발생했습니다.');
         }
