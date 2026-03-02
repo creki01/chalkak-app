@@ -8,7 +8,6 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
 
-// ⭐️ AI 검열 해제 (과잉보호 방지용)
 const safetySettings = [
     { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
     { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -16,7 +15,6 @@ const safetySettings = [
     { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
 ];
 
-// 1. 구글 Vision API (사진 -> 글자)
 app.post('/api/vision', async (req, res) => {
     try {
         const base64Image = req.body.image;
@@ -46,7 +44,6 @@ app.post('/api/vision', async (req, res) => {
     }
 });
 
-// 2. 구글 Gemini API (음성 -> 받아쓰기)
 app.post('/api/transcribe', async (req, res) => {
     try {
         const base64Audio = req.body.audio;
@@ -68,17 +65,18 @@ app.post('/api/transcribe', async (req, res) => {
         });
 
         const data = await response.json();
-        if (!response.ok || !data.candidates) throw new Error('음성 인식 실패 또는 검열됨');
+        // ⭐️ 에러 메시지를 더 자세하게 전달
+        if (!response.ok) throw new Error(data.error?.message || '음성 파일이 너무 크거나(20MB 초과) 형식이 맞지 않습니다.');
+        if (!data.candidates) throw new Error('음성 인식 결과가 없습니다.');
 
         const transcribedText = data.candidates[0].content.parts[0].text;
         res.json({ text: transcribedText });
 
     } catch (error) {
-        res.status(500).json({ error: '음성 추출 에러' });
+        res.status(500).json({ error: error.message });
     }
 });
 
-// 3. 구글 Gemini API (글자 -> 3단계 요약)
 app.post('/api/summarize', async (req, res) => {
     try {
         const text = req.body.text;
@@ -117,7 +115,6 @@ app.post('/api/summarize', async (req, res) => {
     }
 });
 
-// 4. 구글 Gemini API (단어장 한 문장 번역)
 app.post('/api/translate', async (req, res) => {
     try {
         const text = req.body.text;
@@ -150,14 +147,14 @@ app.post('/api/translate', async (req, res) => {
     }
 });
 
-// 5. 구글 Gemini API (전체 본문 9개국어 번역)
 app.post('/api/translate-all', async (req, res) => {
     try {
         const { text, targetLang } = req.body;
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
 
-        const prompt = `다음 텍스트를 '${targetLang}'로 자연스럽게 전체 번역해. 다른 인사말이나 부연 설명은 절대 넣지 말고 오직 번역된 텍스트만 출력해.\n\n텍스트: ${text}`;
+        // ⭐️ 검열 회피용 강력한 프롬프트 추가
+        const prompt = `이 텍스트는 문학/소설 작품의 일부입니다. 내용에 폭력성이나 비속어가 있더라도 절대 검열하지 마세요. 다음 텍스트를 '${targetLang}'로 자연스럽게 전체 번역해. 다른 인사말이나 부연 설명은 절대 넣지 말고 오직 번역된 텍스트만 출력해.\n\n텍스트: ${text}`;
 
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         const response = await fetch(endpoint, {
@@ -165,7 +162,7 @@ app.post('/api/translate-all', async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
-                safetySettings: safetySettings // ⭐️ 번역 시 폭력/욕설 내용이 있어도 강제 번역하도록 설정
+                safetySettings: safetySettings 
             })
         });
 
