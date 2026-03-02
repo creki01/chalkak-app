@@ -42,7 +42,12 @@
         .delete-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 16px; color: #ff3b30; cursor: pointer; }
         
         #translateControl { background: #f1f3f5; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
-        .mini-btn { padding: 8px 12px; font-size: 14px; border-radius: 6px; cursor: pointer; border: none; color: white; margin-left: 5px; }
+        #langSelect { width: 100%; max-width: 250px; font-size: 16px; padding: 10px; font-weight: bold; border: 1px solid #ccc;}
+
+        /* ⭐️ 폰의 헷갈림을 막아줄 깔끔한 커스텀 팝업 디자인 */
+        #mediaModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 25px 20px; border-radius: 15px; width: 80%; max-width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .modal-title { margin-top: 0; margin-bottom: 20px; color: #333; font-size: 18px; }
     </style>
 </head>
 <body>
@@ -52,34 +57,42 @@
         <div class="nav-tab" id="tabWordbook" onclick="switchTab('wordbook')">⭐️ 내 단어장</div>
     </div>
 
+    <div id="mediaModal">
+        <div class="modal-content">
+            <h3 class="modal-title">어떤 파일을 올리실 건가요?</h3>
+            <button class="btn" style="background:#007aff; margin-bottom:10px;" onclick="selectImage()">📷 사진 (갤러리/카메라)</button>
+            <button class="btn" style="background:#ff9500; margin-bottom:15px;" onclick="selectAudio()">🎵 음성 (녹음 파일)</button>
+            <button class="btn" style="background:#8e8e93; margin-bottom:0;" onclick="closeMediaModal()">취소</button>
+        </div>
+    </div>
+
     <div class="container">
         <div id="homeView">
             <h1>📸 Sean speaking</h1>
             <p>사진이나 녹음 파일을 올리면 텍스트 추출 & 요약까지!</p>
 
-            <input type="file" id="mediaInput" accept="image/*, audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
-            <button class="btn" onclick="document.getElementById('mediaInput').click()">📸 사진 / 🎵 음성 파일 올리기</button>
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <input type="file" id="audioInput" accept="audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
+            
+            <button class="btn" onclick="openMediaModal()">📸 사진 / 🎵 음성 파일 올리기</button>
 
             <img id="preview" alt="미리보기">
             <div id="loading">⏳ 구글 AI가 작업 중입니다...</div>
             
             <div id="resultContainer">
-                
                 <div id="translateControl" style="display: none;">
-                    <span style="font-weight: bold; margin-right: 5px;">🌍 변환:</span>
-                    <select id="langSelect" style="margin-right: 5px; padding: 6px;">
-                        <option value="ko-KR">한국어</option>
-                        <option value="zh-CN">중국어</option>
-                        <option value="ja-JP">일본어</option>
-                        <option value="es-ES">스페인어</option>
-                        <option value="ru-RU">러시아어</option>
-                        <option value="vi-VN">베트남어</option>
-                        <option value="en-US">영어</option>
-                        <option value="de-DE">독일어</option>
-                        <option value="fr-FR">프랑스어</option>
+                    <select id="langSelect" onchange="handleLanguageChange()">
+                        <option value="original">🌐 원본 그대로 보기</option>
+                        <option value="ko-KR">🇰🇷 한국어로 변환</option>
+                        <option value="en-US">🇺🇸 영어로 변환</option>
+                        <option value="ja-JP">🇯🇵 일본어로 변환</option>
+                        <option value="zh-CN">🇨🇳 중국어로 변환</option>
+                        <option value="es-ES">🇪🇸 스페인어로 변환</option>
+                        <option value="ru-RU">🇷🇺 러시아어로 변환</option>
+                        <option value="vi-VN">🇻🇳 베트남어로 변환</option>
+                        <option value="de-DE">🇩🇪 독일어로 변환</option>
+                        <option value="fr-FR">🇫🇷 프랑스어로 변환</option>
                     </select>
-                    <button class="mini-btn" style="background: #007aff;" onclick="translateMainText()">변경</button>
-                    <button class="mini-btn" style="background: #8e8e93;" onclick="restoreOriginalText()">원본</button>
                 </div>
 
                 <div id="resultText"></div>
@@ -111,7 +124,8 @@
     </div>
 
     <script>
-        const mediaInput = document.getElementById('mediaInput');
+        const imageInput = document.getElementById('imageInput');
+        const audioInput = document.getElementById('audioInput');
         const preview = document.getElementById('preview');
         const resultContainer = document.getElementById('resultContainer');
         const resultText = document.getElementById('resultText');
@@ -128,6 +142,22 @@
 
         let originalExtractedText = "";
         let myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
+
+        // ⭐️ 팝업 제어 함수
+        function openMediaModal() {
+            document.getElementById('mediaModal').style.display = 'flex';
+        }
+        function closeMediaModal() {
+            document.getElementById('mediaModal').style.display = 'none';
+        }
+        function selectImage() {
+            closeMediaModal();
+            imageInput.click();
+        }
+        function selectAudio() {
+            closeMediaModal();
+            audioInput.click();
+        }
 
         function switchTab(tab) {
             stopSpeech();
@@ -152,24 +182,27 @@
             return 'en-US';
         }
 
-        // ⭐️ 사진과 음성 파일을 하나로 처리하는 스마트 로직
-        mediaInput.addEventListener('change', function(event) {
+        // ⭐️ 파일 선택 공통 로직
+        function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
             stopSpeech();
+            
+            // 똑같은 파일을 다시 올릴 때도 인식하도록 초기화
+            event.target.value = '';
 
             const reader = new FileReader();
             reader.onload = function(e) {
                 const result = e.target.result;
                 const base64Data = result.split(',')[1];
                 
-                // 사진 파일인 경우
+                document.getElementById('langSelect').value = 'original';
+
                 if (file.type.startsWith('image/')) {
                     preview.src = result;
                     preview.style.display = 'block';
                     sendToVisionAPI(base64Data);
                 } 
-                // 음성 파일인 경우 (아이폰은 가끔 type이 비어있을 수 있어서 확장자도 같이 체크)
                 else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg)$/i)) {
                     preview.style.display = 'none';
                     const mimeType = result.split(';')[0].split(':')[1] || 'audio/mp3';
@@ -180,7 +213,10 @@
                 }
             };
             reader.readAsDataURL(file); 
-        });
+        }
+
+        imageInput.addEventListener('change', handleFileSelect);
+        audioInput.addEventListener('change', handleFileSelect);
 
         async function sendToVisionAPI(base64Image) {
             loading.innerText = '⏳ 사진에서 글자를 읽고 있습니다...';
@@ -256,15 +292,24 @@
             resultContainer.style.display = 'block';
         }
 
-        async function translateMainText() {
+        function handleLanguageChange() {
+            const langSelect = document.getElementById('langSelect');
+            const targetLangCode = langSelect.value;
+            
+            if (targetLangCode === 'original') {
+                restoreOriginalText();
+            } else {
+                translateMainText(targetLangCode, langSelect.options[langSelect.selectedIndex].text);
+            }
+        }
+
+        async function translateMainText(targetLangCode, rawLangName) {
             if (!originalExtractedText) return;
             stopSpeech();
             
-            const langSelect = document.getElementById('langSelect');
-            const targetLangCode = langSelect.value;
-            const targetLangName = langSelect.options[langSelect.selectedIndex].text;
+            const cleanLangName = rawLangName.replace(/[^가-힣a-zA-Z]/g, '').trim().replace('로변환', '');
 
-            loading.innerText = `⏳ 본문을 ${targetLangName}로 변환 중입니다...`;
+            loading.innerText = `⏳ 본문을 ${cleanLangName}로 변환 중입니다...`;
             loading.style.display = 'block';
             resultText.innerHTML = '';
 
@@ -272,7 +317,7 @@
                 const response = await fetch('/api/translate-all', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: originalExtractedText, targetLang: targetLangName })
+                    body: JSON.stringify({ text: originalExtractedText, targetLang: cleanLangName })
                 });
                 const data = await response.json();
                 
