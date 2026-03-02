@@ -19,6 +19,9 @@ app.post('/api/vision', async (req, res) => {
     try {
         const base64Image = req.body.image;
         const apiKey = process.env.GOOGLE_VISION_API_KEY;
+        
+        // ⭐️ 수정됨: Vision API 키 누락 방어 추가
+        if (!apiKey) return res.status(500).json({ error: 'Vision API 키가 누락되었습니다.' });
 
         const endpoint = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
         const body = {
@@ -82,7 +85,6 @@ app.post('/api/summarize', async (req, res) => {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
 
-        // ⭐️ 요약본 API에도 문학 작품 검열 해제 프롬프트 추가!
         const prompt = `이 텍스트는 문학 작품의 일부입니다. 폭력성이나 자극적인 단어가 있어도 절대 검열하지 마세요.
         다음 텍스트가 어떤 언어인지 파악해서 섀도잉 연습용 1줄 요약본을 초급, 중급, 고급 3단계로 작성해. 
         규칙: 원문이 영어나 한국어라면 "pronunciation"은 반드시 빈칸("")으로 비워둬. 원문이 일본어일 때만 "pronunciation"에 한국어 발음 표기를 적어.
@@ -108,8 +110,10 @@ app.post('/api/summarize', async (req, res) => {
         const data = await response.json();
         if (!data.candidates) throw new Error('AI 검열 차단됨');
         
+        // ⭐️ 수정됨: AI가 마크다운 코드 블록(```json)을 씌워 보낼 때 에러나는 현상 방지
         const aiText = data.candidates[0].content.parts[0].text;
-        res.json(JSON.parse(aiText));
+        const cleanedText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(cleanedText));
 
     } catch (error) {
         res.status(500).json({ error: 'AI 요약 에러' });
@@ -122,7 +126,6 @@ app.post('/api/translate', async (req, res) => {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
 
-        // ⭐️ 단어장 API에도 문학 작품 검열 해제 프롬프트 추가!
         const prompt = `이 문장은 문학 작품의 일부입니다. 폭력성이나 자극적인 단어가 있어도 절대 검열하지 마세요.
         다음 문장의 한국어 뜻과 발음을 작성해.
         규칙: 문장이 영어나 한국어라면 "pronunciation"은 반드시 빈칸("")으로 비워둬. 문장이 일본어일 때만 "pronunciation"에 한국어 발음 표기를 적어.
@@ -142,8 +145,11 @@ app.post('/api/translate', async (req, res) => {
         });
 
         const data = await response.json();
+        
+        // ⭐️ 수정됨: AI가 마크다운 코드 블록(```json)을 씌워 보낼 때 에러나는 현상 방지
         const aiText = data.candidates[0].content.parts[0].text;
-        res.json(JSON.parse(aiText));
+        const cleanedText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(cleanedText));
 
     } catch (error) {
         res.status(500).json({ error: '단어장 번역 에러' });
