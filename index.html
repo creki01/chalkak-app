@@ -7,7 +7,6 @@
     <style>
         body { font-family: sans-serif; text-align: center; padding: 0; background: #f8f9fa; margin: 0; }
         
-        /* 상단 네비게이션 탭 */
         .nav-bar { display: flex; background: white; border-bottom: 2px solid #eee; position: sticky; top: 0; z-index: 100; }
         .nav-tab { flex: 1; padding: 15px; font-size: 16px; font-weight: bold; color: #888; cursor: pointer; border-bottom: 3px solid transparent; }
         .nav-tab.active { color: #007aff; border-bottom: 3px solid #007aff; }
@@ -27,7 +26,6 @@
         .speed-control { margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: bold; color: #333;}
         select { padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; outline: none; }
         
-        /* 문장과 별 버튼을 묶는 상자 */
         .sentence-box { display: flex; align-items: flex-start; margin-bottom: 10px; }
         .sentence { flex: 1; transition: background-color 0.2s; cursor: pointer; border-radius: 4px; padding: 2px 4px; }
         .sentence:active { background-color: #e0e0e0; }
@@ -36,13 +34,11 @@
         .star-btn { font-size: 20px; cursor: pointer; background: none; border: none; opacity: 0.3; transition: 0.2s; padding: 0 5px; }
         .star-btn.saved { opacity: 1; color: gold; text-shadow: 0 0 5px rgba(255,215,0,0.5); }
 
-        /* 단어장 리스트 디자인 */
         .word-item { background: #f1f3f5; padding: 15px; border-radius: 10px; margin-bottom: 15px; position: relative;}
         .word-text { font-weight: bold; font-size: 16px; margin-bottom: 5px; cursor: pointer; }
         .word-trans { color: #555; font-size: 14px; margin-bottom: 3px; }
         .word-pron { color: #888; font-size: 13px; }
         .delete-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 16px; color: #ff3b30; cursor: pointer; }
-        .word-loading { font-size: 12px; color: #007aff; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -54,6 +50,9 @@
 
     <div class="container">
         <div id="homeView">
+            <h1>📸 Sean speaking</h1>
+            <p>사진을 찍으면 텍스트 추출 & 요약까지! (한/영/일 지원)</p>
+
             <input type="file" id="imageInput" accept="image/*" style="display: none;">
             <button class="btn" onclick="document.getElementById('imageInput').click()">사진 찍기 / 갤러리 선택</button>
 
@@ -105,10 +104,8 @@
         let isLooping = false; 
         let currentLoopTarget = null; 
 
-        // 💾 내 스마트폰(브라우저)에서 단어장 불러오기
         let myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
 
-        // 탭 전환 기능
         function switchTab(tab) {
             stopSpeech();
             document.getElementById('tabHome').classList.remove('active');
@@ -122,7 +119,7 @@
             } else {
                 document.getElementById('tabWordbook').classList.add('active');
                 document.getElementById('wordbookView').style.display = 'block';
-                renderWordbook(); // 단어장 열 때마다 목록 다시 그리기
+                renderWordbook(); 
             }
         }
 
@@ -192,18 +189,19 @@
                 summaryContent.innerHTML = '';
                 
                 ['beginner', 'intermediate', 'advanced'].forEach(level => {
-                    const summaryData = data[level];
-                    let displayText = `${summaryData.text}\n${summaryData.translation}\n[${summaryData.pronunciation}]`;
-                    createSentenceUI(displayText, level, summaryContent, summaryData.text); // 소리낼 원문만 따로 전달
+                    if (data[level]) {
+                        const summaryData = data[level];
+                        let displayText = `${summaryData.text}\n${summaryData.translation}\n[${summaryData.pronunciation}]`;
+                        createSentenceUI(displayText, level, summaryContent, summaryData.text); 
+                    }
                 });
             } catch (error) {
                 summaryContent.innerHTML = `🚨 에러 발생`;
             }
         }
 
-        // ⭐️ 문장 + 별버튼 묶어서 화면에 그리는 함수
         function createSentenceUI(displayText, id, container, speakText = null) {
-            const actualSpeakText = speakText || displayText; // 소리낼 텍스트 기준
+            const actualSpeakText = speakText || displayText; 
             const cleanText = actualSpeakText.trim();
 
             const box = document.createElement('div');
@@ -218,7 +216,6 @@
             const starBtn = document.createElement('button');
             starBtn.className = 'star-btn';
             starBtn.innerText = '⭐️';
-            // 이미 저장된 문장이면 별 색칠하기
             if (myWordbook.some(item => item.text === cleanText)) {
                 starBtn.classList.add('saved');
             }
@@ -229,11 +226,9 @@
             container.appendChild(box);
         }
 
-        // ⭐️ 별 버튼 눌렀을 때 실행되는 함수 (AI에게 번역 요청 후 저장)
         async function toggleStar(text, btnElement, boxElement) {
             const isSaved = myWordbook.some(item => item.text === text);
             
-            // 1. 이미 저장되어 있다면 삭제
             if (isSaved) {
                 myWordbook = myWordbook.filter(item => item.text !== text);
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
@@ -242,8 +237,7 @@
                 return;
             }
 
-            // 2. 새로 저장하는 경우 (AI 번역 요청)
-            btnElement.innerText = '⏳'; // 로딩 표시
+            btnElement.innerText = '⏳'; 
             try {
                 const res = await fetch('/api/translate', {
                     method: 'POST',
@@ -252,7 +246,6 @@
                 });
                 const data = await res.json();
                 
-                // 단어장 배열에 새 객체 추가 후 스마트폰 메모리에 저장
                 myWordbook.unshift({
                     text: text,
                     translation: data.translation,
@@ -268,7 +261,6 @@
             }
         }
 
-        // 📖 내 단어장 화면 그리기
         function renderWordbook() {
             wordList.innerHTML = '';
             if (myWordbook.length === 0) {
@@ -287,7 +279,6 @@
                     <button class="delete-btn" onclick="deleteFromWordbook('${item.text}')">✖</button>
                 `;
                 
-                // 단어장에서 문장 터치 시 무한반복
                 const textSpan = div.querySelector('.word-text');
                 textSpan.onclick = function() { toggleLoop(item.text, this); };
 
@@ -299,11 +290,10 @@
             if(confirm("이 문장을 단어장에서 삭제할까요?")) {
                 myWordbook = myWordbook.filter(item => item.text !== text);
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
-                renderWordbook(); // 화면 갱신
+                renderWordbook(); 
             }
         }
 
-        // 🔂 무한 반복 관련 코드
         function toggleLoop(text, element) {
             if (isLooping && currentLoopTarget === element) { stopSpeech(); return; }
             stopSpeech();
@@ -364,4 +354,3 @@
     </script>
 </body>
 </html>
-
