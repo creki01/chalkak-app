@@ -5,12 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>📸 찰칵 스피킹</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f8f9fa; margin: 0; }
+        body { font-family: sans-serif; text-align: center; padding: 0; background: #f8f9fa; margin: 0; }
+        
+        /* 상단 네비게이션 탭 */
+        .nav-bar { display: flex; background: white; border-bottom: 2px solid #eee; position: sticky; top: 0; z-index: 100; }
+        .nav-tab { flex: 1; padding: 15px; font-size: 16px; font-weight: bold; color: #888; cursor: pointer; border-bottom: 3px solid transparent; }
+        .nav-tab.active { color: #007aff; border-bottom: 3px solid #007aff; }
+
+        .container { padding: 20px; }
         .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 10px;}
         .btn-green { background: #34c759; } 
         #preview { max-width: 100%; margin-top: 20px; border-radius: 12px; display: none; }
         
-        #resultContainer { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #resultContainer, #wordbookContainer { margin-top: 20px; text-align: left; background: white; padding: 20px; border-radius: 12px; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         #resultText { font-size: 16px; margin-bottom: 20px; color: #333; line-height: 1.8; border-bottom: 1px solid #eee; padding-bottom: 20px;}
         
         #summaryContainer { margin-top: 20px; text-align: left; background: #e3f2fd; padding: 20px; border-radius: 12px; display: none; }
@@ -20,44 +27,66 @@
         .speed-control { margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: bold; color: #333;}
         select { padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; outline: none; }
         
-        .sentence { transition: background-color 0.2s; cursor: pointer; border-radius: 4px; display: inline-block; width: 100%; margin-bottom: 10px; padding: 2px 4px; }
+        /* 문장과 별 버튼을 묶는 상자 */
+        .sentence-box { display: flex; align-items: flex-start; margin-bottom: 10px; }
+        .sentence { flex: 1; transition: background-color 0.2s; cursor: pointer; border-radius: 4px; padding: 2px 4px; }
         .sentence:active { background-color: #e0e0e0; }
-        /* 반복 중일 때 눈에 띄게 노란색 형광펜 유지 */
         .highlight { background-color: #ffeb3b; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        .star-btn { font-size: 20px; cursor: pointer; background: none; border: none; opacity: 0.3; transition: 0.2s; padding: 0 5px; }
+        .star-btn.saved { opacity: 1; color: gold; text-shadow: 0 0 5px rgba(255,215,0,0.5); }
+
+        /* 단어장 리스트 디자인 */
+        .word-item { background: #f1f3f5; padding: 15px; border-radius: 10px; margin-bottom: 15px; position: relative;}
+        .word-text { font-weight: bold; font-size: 16px; margin-bottom: 5px; cursor: pointer; }
+        .word-trans { color: #555; font-size: 14px; margin-bottom: 3px; }
+        .word-pron { color: #888; font-size: 13px; }
+        .delete-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 16px; color: #ff3b30; cursor: pointer; }
+        .word-loading { font-size: 12px; color: #007aff; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>📸 찰칵 스피킹</h1>
-    <p>사진을 찍으면 텍스트 추출 & 요약까지! (한/영/일 지원)</p>
 
-    <input type="file" id="imageInput" accept="image/*" style="display: none;">
-    <button class="btn" onclick="document.getElementById('imageInput').click()">사진 찍기 / 갤러리 선택</button>
+    <div class="nav-bar">
+        <div class="nav-tab active" id="tabHome" onclick="switchTab('home')">📸 카메라 모드</div>
+        <div class="nav-tab" id="tabWordbook" onclick="switchTab('wordbook')">⭐️ 내 단어장</div>
+    </div>
 
-    <img id="preview" alt="미리보기">
-    <div id="loading">⏳ 구글 AI가 글자를 읽고 있습니다...</div>
-    
-    <div id="resultContainer">
-        <div id="resultText"></div>
-        
-        <div id="summaryContainer">
-            <h3>💡 AI 3단계 요약 훈련</h3>
-            <p style="font-size: 13px; color: #555; margin-top: -10px;">(터치하면 무한반복 / 다시 터치하면 정지!)</p>
-            <div id="summaryContent"></div>
+    <div class="container">
+        <div id="homeView">
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <button class="btn" onclick="document.getElementById('imageInput').click()">사진 찍기 / 갤러리 선택</button>
+
+            <img id="preview" alt="미리보기">
+            <div id="loading">⏳ 구글 AI가 글자를 읽고 있습니다...</div>
+            
+            <div id="resultContainer">
+                <div id="resultText"></div>
+                
+                <div id="summaryContainer">
+                    <h3>💡 AI 3단계 요약 훈련</h3>
+                    <div id="summaryContent"></div>
+                </div>
+                
+                <div class="speed-control" style="margin-top: 20px;">
+                    <label for="speedSelect">🗣️ 속도 조절:</label>
+                    <select id="speedSelect">
+                        <option value="0.5">아주 느리게 (0.5x)</option>
+                        <option value="0.8">조금 느리게 (0.8x)</option>
+                        <option value="1.0" selected>정상 (1.0x)</option>
+                        <option value="1.2">조금 빠르게 (1.2x)</option>
+                    </select>
+                </div>
+                <button class="btn btn-green" onclick="playAllSpeech()">🔊 전체 처음부터 듣기</button>
+                <button class="btn" style="background-color: #8e8e93;" onclick="stopSpeech()">⏹️ 모든 발음 정지</button>
+            </div>
         </div>
-        
-        <div class="speed-control" style="margin-top: 20px;">
-            <label for="speedSelect">🗣️ 속도 조절:</label>
-            <select id="speedSelect">
-                <option value="0.5">아주 느리게 (0.5x)</option>
-                <option value="0.8">조금 느리게 (0.8x)</option>
-                <option value="1.0" selected>정상 (1.0x)</option>
-                <option value="1.2">조금 빠르게 (1.2x)</option>
-                <option value="1.5">빠르게 (1.5x)</option>
-            </select>
-        </div>
 
-        <button class="btn btn-green" id="speakBtn" onclick="playAllSpeech()">🔊 전체 처음부터 듣기</button>
-        <button class="btn" style="background-color: #8e8e93;" onclick="stopSpeech()">⏹️ 모든 발음 정지</button>
+        <div id="wordbookView" style="display: none;">
+            <p style="color:#666; font-size:14px;">(문장을 터치하면 무한반복 재생됩니다)</p>
+            <div id="wordList"></div>
+            <button class="btn" style="background-color: #8e8e93; margin-top: 20px;" onclick="stopSpeech()">⏹️ 발음 정지</button>
+        </div>
     </div>
 
     <script>
@@ -69,13 +98,34 @@
         const summaryContent = document.getElementById('summaryContent');
         const loading = document.getElementById('loading');
         const speedSelect = document.getElementById('speedSelect');
+        const wordList = document.getElementById('wordList');
         
         let sentences = []; 
-        let sequentialIndex = -1; // 전체 재생용
-        let isLooping = false; // 현재 무한반복 중인지 여부
-        let currentLoopTarget = null; // 현재 반복 중인 문장(태그)
+        let sequentialIndex = -1; 
+        let isLooping = false; 
+        let currentLoopTarget = null; 
 
-        // 🇯🇵 언어 자동 감지 함수
+        // 💾 내 스마트폰(브라우저)에서 단어장 불러오기
+        let myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
+
+        // 탭 전환 기능
+        function switchTab(tab) {
+            stopSpeech();
+            document.getElementById('tabHome').classList.remove('active');
+            document.getElementById('tabWordbook').classList.remove('active');
+            document.getElementById('homeView').style.display = 'none';
+            document.getElementById('wordbookView').style.display = 'none';
+
+            if (tab === 'home') {
+                document.getElementById('tabHome').classList.add('active');
+                document.getElementById('homeView').style.display = 'block';
+            } else {
+                document.getElementById('tabWordbook').classList.add('active');
+                document.getElementById('wordbookView').style.display = 'block';
+                renderWordbook(); // 단어장 열 때마다 목록 다시 그리기
+            }
+        }
+
         function isJapaneseText(text) {
             return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(text);
         }
@@ -83,14 +133,12 @@
         imageInput.addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             stopSpeech();
             const reader = new FileReader();
             reader.onload = function(e) {
                 preview.src = e.target.result;
                 preview.style.display = 'block';
-                const base64Image = e.target.result.split(',')[1]; 
-                sendToVisionAPI(base64Image);
+                sendToVisionAPI(e.target.result.split(',')[1]);
             };
             reader.readAsDataURL(file); 
         });
@@ -117,17 +165,8 @@
                 if (text) {
                     sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
                     sentences.forEach((sentence, index) => {
-                        const span = document.createElement('span');
-                        span.className = 'sentence';
-                        span.id = 'sentence-' + index;
-                        span.innerText = sentence + ' '; 
-                        
-                        // ⭐️ 핵심 기능: 문장 터치 시 무한반복 토글(On/Off) 연결
-                        span.onclick = function() { toggleLoop(sentence, this); };
-                        
-                        resultText.appendChild(span);
+                        createSentenceUI(sentence, index, resultText);
                     });
-                    
                     generateSummary(text);
                 } else {
                     resultText.innerText = '글자를 찾지 못했어요.';
@@ -142,8 +181,7 @@
 
         async function generateSummary(text) {
             summaryContainer.style.display = 'block';
-            summaryContent.innerHTML = '⏳ AI가 수준별 요약본을 만들고 있습니다...';
-
+            summaryContent.innerHTML = '⏳ AI가 요약본을 짓고 있습니다...';
             try {
                 const response = await fetch('/api/summarize', {
                     method: 'POST',
@@ -151,80 +189,143 @@
                     body: JSON.stringify({ text: text })
                 });
                 const data = await response.json();
-                
-                if (!response.ok) throw new Error(data.error || '요약본 생성 실패');
-                
                 summaryContent.innerHTML = '';
-                const levels = [
-                    { key: 'beginner', title: '🌱 초급 (Beginner)' },
-                    { key: 'intermediate', title: '🌿 중급 (Intermediate)' },
-                    { key: 'advanced', title: '🌳 고급 (Advanced)' }
-                ];
                 
-                levels.forEach(lvl => {
-                    const p = document.createElement('p');
-                    p.innerHTML = `<strong>${lvl.title}</strong><br>`;
-                    
-                    const span = document.createElement('span');
-                    span.className = 'sentence';
-                    
-                    const summaryData = data[lvl.key];
-                    let displayText = summaryData.text;
-                    if (summaryData.translation) displayText += `\n${summaryData.translation}`;
-                    if (summaryData.pronunciation) displayText += `\n[${summaryData.pronunciation}]`;
-                    
-                    span.innerText = displayText;
-                    span.dataset.speakText = summaryData.text; 
-                    
-                    // ⭐️ 핵심 기능: 요약본 터치 시 무한반복 토글(On/Off) 연결
-                    span.onclick = function() { toggleLoop(this.dataset.speakText, this); };
-                    
-                    p.appendChild(span);
-                    summaryContent.appendChild(p);
+                ['beginner', 'intermediate', 'advanced'].forEach(level => {
+                    const summaryData = data[level];
+                    let displayText = `${summaryData.text}\n${summaryData.translation}\n[${summaryData.pronunciation}]`;
+                    createSentenceUI(displayText, level, summaryContent, summaryData.text); // 소리낼 원문만 따로 전달
                 });
             } catch (error) {
-                summaryContent.innerHTML = `<p style="color:#d32f2f; font-weight:bold;">🚨 에러: ${error.message}</p>`;
+                summaryContent.innerHTML = `🚨 에러 발생`;
             }
         }
 
-        // 🔂 한 문장 무한 반복 On/Off 스위치 함수
-        function toggleLoop(text, element) {
-            // 이미 이 문장이 반복 중인데 또 눌렀다면? -> 멈춤!
-            if (isLooping && currentLoopTarget === element) {
-                stopSpeech();
+        // ⭐️ 문장 + 별버튼 묶어서 화면에 그리는 함수
+        function createSentenceUI(displayText, id, container, speakText = null) {
+            const actualSpeakText = speakText || displayText; // 소리낼 텍스트 기준
+            const cleanText = actualSpeakText.trim();
+
+            const box = document.createElement('div');
+            box.className = 'sentence-box';
+
+            const span = document.createElement('span');
+            span.className = 'sentence';
+            span.id = `sentence-${id}`;
+            span.innerText = displayText.trim() + ' ';
+            span.onclick = function() { toggleLoop(cleanText, this); };
+
+            const starBtn = document.createElement('button');
+            starBtn.className = 'star-btn';
+            starBtn.innerText = '⭐️';
+            // 이미 저장된 문장이면 별 색칠하기
+            if (myWordbook.some(item => item.text === cleanText)) {
+                starBtn.classList.add('saved');
+            }
+            starBtn.onclick = function() { toggleStar(cleanText, this, box); };
+
+            box.appendChild(span);
+            box.appendChild(starBtn);
+            container.appendChild(box);
+        }
+
+        // ⭐️ 별 버튼 눌렀을 때 실행되는 함수 (AI에게 번역 요청 후 저장)
+        async function toggleStar(text, btnElement, boxElement) {
+            const isSaved = myWordbook.some(item => item.text === text);
+            
+            // 1. 이미 저장되어 있다면 삭제
+            if (isSaved) {
+                myWordbook = myWordbook.filter(item => item.text !== text);
+                localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
+                btnElement.classList.remove('saved');
+                alert("단어장에서 삭제되었습니다.");
                 return;
             }
 
-            // 새로운 문장을 눌렀다면? -> 기존 멈추고 새 문장 반복 시작!
+            // 2. 새로 저장하는 경우 (AI 번역 요청)
+            btnElement.innerText = '⏳'; // 로딩 표시
+            try {
+                const res = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                const data = await res.json();
+                
+                // 단어장 배열에 새 객체 추가 후 스마트폰 메모리에 저장
+                myWordbook.unshift({
+                    text: text,
+                    translation: data.translation,
+                    pronunciation: data.pronunciation
+                });
+                localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
+                
+                btnElement.innerText = '⭐️';
+                btnElement.classList.add('saved');
+            } catch (error) {
+                btnElement.innerText = '⭐️';
+                alert("저장에 실패했습니다.");
+            }
+        }
+
+        // 📖 내 단어장 화면 그리기
+        function renderWordbook() {
+            wordList.innerHTML = '';
+            if (myWordbook.length === 0) {
+                wordList.innerHTML = '<p style="color:#888;">아직 저장된 문장이 없습니다.<br>원하는 문장 옆 ⭐️를 눌러보세요!</p>';
+                return;
+            }
+
+            myWordbook.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'word-item';
+                
+                div.innerHTML = `
+                    <div class="word-text sentence" id="word-${index}">${item.text}</div>
+                    <div class="word-trans">${item.translation}</div>
+                    <div class="word-pron">[${item.pronunciation}]</div>
+                    <button class="delete-btn" onclick="deleteFromWordbook('${item.text}')">✖</button>
+                `;
+                
+                // 단어장에서 문장 터치 시 무한반복
+                const textSpan = div.querySelector('.word-text');
+                textSpan.onclick = function() { toggleLoop(item.text, this); };
+
+                wordList.appendChild(div);
+            });
+        }
+
+        function deleteFromWordbook(text) {
+            if(confirm("이 문장을 단어장에서 삭제할까요?")) {
+                myWordbook = myWordbook.filter(item => item.text !== text);
+                localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
+                renderWordbook(); // 화면 갱신
+            }
+        }
+
+        // 🔂 무한 반복 관련 코드
+        function toggleLoop(text, element) {
+            if (isLooping && currentLoopTarget === element) { stopSpeech(); return; }
             stopSpeech();
             isLooping = true;
             currentLoopTarget = element;
-
             element.classList.add('highlight');
             speakLoop(text, element);
         }
 
-        // 🔂 무한 반복을 실제로 돌려주는 함수
         function speakLoop(text, element) {
-            // 다른 곳을 터치해서 반복 모드가 풀렸다면 재생하지 않고 즉시 종료
             if (!isLooping || currentLoopTarget !== element) return;
-
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = isJapaneseText(text) ? 'ja-JP' : 'en-US';
             utterance.rate = parseFloat(speedSelect.value);
-
             utterance.onend = function() {
-                // 문장을 다 읽었는데 여전히 반복 모드가 켜져있다면?
                 if (isLooping && currentLoopTarget === element) {
-                    // 0.5초(500ms) 숨 고르고 다시 똑같은 문장 재생!
                     setTimeout(() => speakLoop(text, element), 500);
                 }
             };
-
             window.speechSynthesis.speak(utterance);
         }
 
-        // ▶️ 전체 순차 재생 ("전체 처음부터 듣기" 버튼용)
         function playAllSpeech() {
             stopSpeech();
             if (sentences.length === 0) return;
@@ -233,39 +334,24 @@
         }
 
         function speakSequential() {
-            if (sequentialIndex >= sentences.length || sequentialIndex < 0) {
-                clearHighlights();
-                return;
-            }
-
+            if (sequentialIndex >= sentences.length || sequentialIndex < 0) { clearHighlights(); return; }
             clearHighlights();
             const targetSpan = document.getElementById('sentence-' + sequentialIndex);
             if (targetSpan) {
                 targetSpan.classList.add('highlight');
                 targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-
-            const textToSpeak = sentences[sequentialIndex];
-            const utterance = new SpeechSynthesisUtterance(textToSpeak);
-            utterance.lang = isJapaneseText(textToSpeak) ? 'ja-JP' : 'en-US';
+            const utterance = new SpeechSynthesisUtterance(sentences[sequentialIndex]);
+            utterance.lang = isJapaneseText(sentences[sequentialIndex]) ? 'ja-JP' : 'en-US';
             utterance.rate = parseFloat(speedSelect.value); 
-            
             utterance.onend = function() {
-                // 사용자가 정지 버튼을 누르지 않았다면 다음 문장으로!
-                if (sequentialIndex >= 0) {
-                    sequentialIndex++;
-                    speakSequential();
-                }
+                if (sequentialIndex >= 0) { sequentialIndex++; speakSequential(); }
             };
-
             window.speechSynthesis.speak(utterance);
         }
 
-        // ⏹️ 모든 재생 및 상태 초기화 (멈춤)
         function stopSpeech() {
-            isLooping = false; // 무한 반복 모드 해제
-            currentLoopTarget = null;
-            sequentialIndex = -1; // 순차 재생 모드 해제
+            isLooping = false; currentLoopTarget = null; sequentialIndex = -1;
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
                 clearHighlights();
@@ -273,9 +359,7 @@
         }
 
         function clearHighlights() {
-            document.querySelectorAll('.sentence').forEach(span => {
-                span.classList.remove('highlight');
-            });
+            document.querySelectorAll('.sentence').forEach(span => span.classList.remove('highlight'));
         }
     </script>
 </body>
