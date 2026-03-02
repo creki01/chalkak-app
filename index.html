@@ -12,10 +12,14 @@
         .nav-tab.active { color: #007aff; border-bottom: 3px solid #007aff; }
 
         .container { padding: 20px; }
-        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: bold; margin-bottom: 12px; transition: 0.2s;}
+        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 16px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: bold; transition: 0.2s;}
         .btn:active { opacity: 0.8; }
         .btn-green { background: #34c759; margin-bottom: 10px;} 
         .btn-orange { background: #ff9500; } 
+        .btn-purple { background: #5856d6; } 
+        
+        .button-group { display: flex; gap: 8px; margin-bottom: 20px; }
+        .button-group .btn { flex: 1; margin-bottom: 0; padding: 15px 5px; font-size: 15px; }
 
         #preview { max-width: 100%; margin-top: 10px; border-radius: 12px; display: none; margin-bottom: 20px;}
         
@@ -43,26 +47,8 @@
         .word-pron { color: #888; font-size: 13px; }
         .delete-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 16px; color: #ff3b30; cursor: pointer; }
         
-        /* ⭐️ 완료 버튼이 필요 없는 새로운 가로 스크롤 버튼 목록 UI */
-        #translateControl { 
-            display: flex; 
-            align-items: center; 
-            overflow-x: auto; 
-            background: #f1f3f5; 
-            padding: 12px; 
-            border-radius: 12px; 
-            margin-bottom: 20px; 
-            white-space: nowrap; 
-            -ms-overflow-style: none; /* IE scrollbar hide */
-            scrollbar-width: none; /* Firefox scrollbar hide */
-        }
-        #translateControl::-webkit-scrollbar { display: none; /* Chrome scrollbar hide */ }
-        
-        .lang-btn {
-            background: white; border: 1px solid #ddd; padding: 8px 14px; border-radius: 20px; 
-            margin-right: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: #555; transition: 0.2s;
-        }
-        .lang-btn.active { background: #007aff; color: white; border-color: #007aff; }
+        #translateControl { background: #f1f3f5; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
+        #langSelect { width: 100%; max-width: 250px; font-size: 16px; padding: 10px; font-weight: bold; border: 1px solid #ccc;}
     </style>
 </head>
 <body>
@@ -77,11 +63,20 @@
             <h1 style="margin-top: 0;">📸 Sean speaking</h1>
             <p style="margin-bottom: 25px; color: #555;">원하는 입력 방식을 선택하세요!</p>
 
-            <input type="file" id="imageInput" accept="image/*" style="display: none;">
-            <button class="btn" onclick="document.getElementById('imageInput').click()">📸 사진 찍기 / 갤러리 선택</button>
+            <!-- ✅ 수정 1: 카메라 → capture="camera" 로 변경 (iOS/Android 모두 카메라 강제 실행) -->
+            <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display: none;">
 
-            <input type="file" id="audioInput" accept="audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
-            <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 녹음 / 음성 파일 불러오기</button>
+            <!-- ✅ 수정 2: 갤러리 → capture 속성 완전 제거 (갤러리/사진첩만 열림) -->
+            <input type="file" id="galleryInput" accept="image/*" style="display: none;">
+
+            <!-- ✅ 수정 3: 음성 → capture 없음 + accept를 넓게 설정 (파일 탐색기 열림) -->
+            <input type="file" id="audioInput" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" style="display: none;">
+            
+            <div class="button-group">
+                <button class="btn" onclick="document.getElementById('cameraInput').click()">📸 카메라</button>
+                <button class="btn btn-purple" onclick="document.getElementById('galleryInput').click()">🖼️ 사진첩</button>
+                <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 음성</button>
+            </div>
 
             <img id="preview" alt="미리보기">
             <div id="loading">⏳ 구글 AI가 작업 중입니다...</div>
@@ -89,17 +84,18 @@
             <div id="resultContainer">
                 
                 <div id="translateControl" style="display: none;">
-                    <span style="font-weight: bold; margin-right: 10px; font-size: 15px;">🌍 변환</span>
-                    <button class="lang-btn active" onclick="selectLanguage(this, 'original', '원본')">🌐 원본</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'ko-KR', '한국어')">🇰🇷 한국어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'en-US', '영어')">🇺🇸 영어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'ja-JP', '일본어')">🇯🇵 일본어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'zh-CN', '중국어')">🇨🇳 중국어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'es-ES', '스페인어')">🇪🇸 스페인어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'ru-RU', '러시아어')">🇷🇺 러시아어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'vi-VN', '베트남어')">🇻🇳 베트남어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'de-DE', '독일어')">🇩🇪 독일어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'fr-FR', '프랑스어')">🇫🇷 프랑스어</button>
+                    <select id="langSelect" onchange="handleLanguageChange()">
+                        <option value="original">🌐 원본 그대로 보기</option>
+                        <option value="ko-KR">🇰🇷 한국어로 변환</option>
+                        <option value="en-US">🇺🇸 영어로 변환</option>
+                        <option value="ja-JP">🇯🇵 일본어로 변환</option>
+                        <option value="zh-CN">🇨🇳 중국어로 변환</option>
+                        <option value="es-ES">🇪🇸 스페인어로 변환</option>
+                        <option value="ru-RU">🇷🇺 러시아어로 변환</option>
+                        <option value="vi-VN">🇻🇳 베트남어로 변환</option>
+                        <option value="de-DE">🇩🇪 독일어로 변환</option>
+                        <option value="fr-FR">🇫🇷 프랑스어로 변환</option>
+                    </select>
                 </div>
 
                 <div id="resultText"></div>
@@ -131,8 +127,10 @@
     </div>
 
     <script>
-        const imageInput = document.getElementById('imageInput');
+        const cameraInput = document.getElementById('cameraInput');
+        const galleryInput = document.getElementById('galleryInput');
         const audioInput = document.getElementById('audioInput');
+        
         const preview = document.getElementById('preview');
         const resultContainer = document.getElementById('resultContainer');
         const resultText = document.getElementById('resultText');
@@ -173,43 +171,40 @@
             return 'en-US';
         }
 
-        // ⭐️ 사진을 새로 올릴 때마다 언어 버튼 상태를 '원본'으로 초기화
-        function resetLanguageButtons() {
-            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelector('.lang-btn').classList.add('active'); // 첫 번째 버튼(원본) 활성화
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            stopSpeech();
+            
+            event.target.value = '';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const result = e.target.result;
+                const base64Data = result.split(',')[1];
+                
+                document.getElementById('langSelect').value = 'original';
+
+                if (file.type.startsWith('image/')) {
+                    preview.src = result;
+                    preview.style.display = 'block';
+                    sendToVisionAPI(base64Data);
+                } 
+                else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg|aac|flac)$/i)) {
+                    preview.style.display = 'none';
+                    const mimeType = result.split(';')[0].split(':')[1] || 'audio/mp3';
+                    sendToTranscribeAPI(base64Data, mimeType);
+                } 
+                else {
+                    alert('지원하지 않는 파일 형식입니다. (사진 또는 음성 파일을 선택해주세요)');
+                }
+            };
+            reader.readAsDataURL(file); 
         }
 
-        imageInput.addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            stopSpeech();
-            resetLanguageButtons();
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                preview.src = e.target.result;
-                preview.style.display = 'block';
-                const base64Image = e.target.result.split(',')[1]; 
-                sendToVisionAPI(base64Image);
-            };
-            reader.readAsDataURL(file); 
-        });
-
-        audioInput.addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            stopSpeech();
-            preview.style.display = 'none';
-            resetLanguageButtons();
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const base64Data = e.target.result.split(',')[1];
-                const mimeType = e.target.result.split(';')[0].split(':')[1] || 'audio/mp3';
-                sendToTranscribeAPI(base64Data, mimeType);
-            };
-            reader.readAsDataURL(file); 
-        });
+        cameraInput.addEventListener('change', handleFileSelect);
+        galleryInput.addEventListener('change', handleFileSelect);
+        audioInput.addEventListener('change', handleFileSelect);
 
         async function sendToVisionAPI(base64Image) {
             loading.innerText = '⏳ 사진에서 글자를 읽고 있습니다...';
@@ -253,7 +248,7 @@
         function handleExtractedText(text) {
             if (text && text.trim() !== "") {
                 originalExtractedText = text; 
-                document.getElementById('translateControl').style.display = 'flex';
+                document.getElementById('translateControl').style.display = 'block';
                 
                 renderSentences(text, resultText, "auto");
                 generateSummary(text);
@@ -285,23 +280,23 @@
             resultContainer.style.display = 'block';
         }
 
-        // ⭐️ 신규: 버튼을 누르면 즉시 작동하는 함수
-        function selectLanguage(btnElement, targetLangCode, langName) {
-            // 버튼 색상 변경 (기존 파란색 빼고, 누른 것만 파란색으로)
-            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            btnElement.classList.add('active');
-
+        function handleLanguageChange() {
+            const langSelect = document.getElementById('langSelect');
+            const targetLangCode = langSelect.value;
+            
             if (targetLangCode === 'original') {
                 restoreOriginalText();
             } else {
-                translateMainText(targetLangCode, langName);
+                translateMainText(targetLangCode, langSelect.options[langSelect.selectedIndex].text);
             }
         }
 
-        async function translateMainText(targetLangCode, cleanLangName) {
+        async function translateMainText(targetLangCode, rawLangName) {
             if (!originalExtractedText) return;
             stopSpeech();
             
+            const cleanLangName = rawLangName.replace(/[^가-힣a-zA-Z]/g, '').trim().replace('로변환', '');
+
             loading.innerText = `⏳ 본문을 ${cleanLangName}로 변환 중입니다...`;
             loading.style.display = 'block';
             resultText.innerHTML = '';
