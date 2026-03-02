@@ -3,11 +3,18 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
-// ⭐️ 빠졌던 바로 그 한 줄 추가!
 const port = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
+
+// ⭐️ AI 검열 해제 (과잉보호 방지용)
+const safetySettings = [
+    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+];
 
 // 1. 구글 Vision API (사진 -> 글자)
 app.post('/api/vision', async (req, res) => {
@@ -55,12 +62,13 @@ app.post('/api/transcribe', async (req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: base64Audio } }] }]
+                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: base64Audio } }] }],
+                safetySettings: safetySettings
             })
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error?.message || 'Gemini 음성 인식 에러');
+        if (!response.ok || !data.candidates) throw new Error('음성 인식 실패 또는 검열됨');
 
         const transcribedText = data.candidates[0].content.parts[0].text;
         res.json({ text: transcribedText });
@@ -91,10 +99,16 @@ app.post('/api/summarize', async (req, res) => {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
+            body: JSON.stringify({ 
+                contents: [{ parts: [{ text: prompt }] }], 
+                generationConfig: { responseMimeType: "application/json" },
+                safetySettings: safetySettings 
+            })
         });
 
         const data = await response.json();
+        if (!data.candidates) throw new Error('AI 검열 차단됨');
+        
         const aiText = data.candidates[0].content.parts[0].text;
         res.json(JSON.parse(aiText));
 
@@ -120,7 +134,11 @@ app.post('/api/translate', async (req, res) => {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
+            body: JSON.stringify({ 
+                contents: [{ parts: [{ text: prompt }] }], 
+                generationConfig: { responseMimeType: "application/json" },
+                safetySettings: safetySettings 
+            })
         });
 
         const data = await response.json();
@@ -145,10 +163,17 @@ app.post('/api/translate-all', async (req, res) => {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            body: JSON.stringify({ 
+                contents: [{ parts: [{ text: prompt }] }],
+                safetySettings: safetySettings // ⭐️ 번역 시 폭력/욕설 내용이 있어도 강제 번역하도록 설정
+            })
         });
 
         const data = await response.json();
+        if (!data.candidates || !data.candidates[0].content) {
+             return res.status(500).json({ error: 'AI가 원서의 특정 단어 때문에 번역을 거부했습니다.' });
+        }
+
         const translatedText = data.candidates[0].content.parts[0].text;
         res.json({ text: translatedText });
 
