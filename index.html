@@ -12,9 +12,8 @@
         .nav-tab.active { color: #007aff; border-bottom: 3px solid #007aff; }
 
         .container { padding: 20px; }
-        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 10px;}
+        .btn { background: #007aff; color: white; border: none; padding: 16px; font-size: 18px; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 10px; font-weight: bold;}
         .btn-green { background: #34c759; } 
-        .btn-orange { background: #ff9500; } 
         
         #preview { max-width: 100%; margin-top: 20px; border-radius: 12px; display: none; }
         
@@ -58,11 +57,8 @@
             <h1>📸 Sean speaking</h1>
             <p>사진이나 녹음 파일을 올리면 텍스트 추출 & 요약까지!</p>
 
-            <input type="file" id="imageInput" accept="image/*" style="display: none;">
-            <button class="btn" onclick="document.getElementById('imageInput').click()">📷 사진 찍기 / 갤러리 선택</button>
-
-            <input type="file" id="audioInput" accept="audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
-            <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 녹음/음성 파일 불러오기</button>
+            <input type="file" id="mediaInput" accept="image/*, audio/*, .mp3, .wav, .m4a, .ogg" style="display: none;">
+            <button class="btn" onclick="document.getElementById('mediaInput').click()">📸 사진 / 🎵 음성 파일 올리기</button>
 
             <img id="preview" alt="미리보기">
             <div id="loading">⏳ 구글 AI가 작업 중입니다...</div>
@@ -115,8 +111,7 @@
     </div>
 
     <script>
-        const imageInput = document.getElementById('imageInput');
-        const audioInput = document.getElementById('audioInput');
+        const mediaInput = document.getElementById('mediaInput');
         const preview = document.getElementById('preview');
         const resultContainer = document.getElementById('resultContainer');
         const resultText = document.getElementById('resultText');
@@ -157,15 +152,32 @@
             return 'en-US';
         }
 
-        imageInput.addEventListener('change', function(event) {
+        // ⭐️ 사진과 음성 파일을 하나로 처리하는 스마트 로직
+        mediaInput.addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
             stopSpeech();
+
             const reader = new FileReader();
             reader.onload = function(e) {
-                preview.src = e.target.result;
-                preview.style.display = 'block';
-                sendToVisionAPI(e.target.result.split(',')[1]);
+                const result = e.target.result;
+                const base64Data = result.split(',')[1];
+                
+                // 사진 파일인 경우
+                if (file.type.startsWith('image/')) {
+                    preview.src = result;
+                    preview.style.display = 'block';
+                    sendToVisionAPI(base64Data);
+                } 
+                // 음성 파일인 경우 (아이폰은 가끔 type이 비어있을 수 있어서 확장자도 같이 체크)
+                else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg)$/i)) {
+                    preview.style.display = 'none';
+                    const mimeType = result.split(';')[0].split(':')[1] || 'audio/mp3';
+                    sendToTranscribeAPI(base64Data, mimeType);
+                } 
+                else {
+                    alert('지원하지 않는 파일 형식입니다. (사진 또는 음성 파일을 선택해주세요)');
+                }
             };
             reader.readAsDataURL(file); 
         });
@@ -190,21 +202,6 @@
             }
         }
 
-        audioInput.addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            stopSpeech();
-            preview.style.display = 'none';
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const base64Data = e.target.result.split(',')[1];
-                const mimeType = e.target.result.split(';')[0].split(':')[1]; 
-                sendToTranscribeAPI(base64Data, mimeType);
-            };
-            reader.readAsDataURL(file); 
-        });
-
         async function sendToTranscribeAPI(base64Audio, mimeType) {
             loading.innerText = '⏳ 음성 파일을 듣고 글자로 받아쓰고 있습니다...\n(길이에 따라 10~20초 소요될 수 있습니다)';
             startLoading();
@@ -215,7 +212,7 @@
                     body: JSON.stringify({ audio: base64Audio, mimeType: mimeType })
                 });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.error);
+                if (!response.ok) throw new Error(data.error || '음성 추출 에러가 발생했습니다.');
 
                 handleExtractedText(data.text);
             } catch (error) {
@@ -283,7 +280,6 @@
                 
                 renderSentences(data.text, resultText, targetLangCode);
             } catch (error) {
-                // ⭐️ 오류 메시지를 더 구체적으로 보여주도록 수정
                 resultText.innerText = "번역에 실패했습니다: " + error.message;
             } finally {
                 loading.style.display = 'none';
@@ -349,7 +345,7 @@
                 });
                 finishLoading();
             } catch (error) {
-                summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다. (원문 내 특정 단어가 검열되었을 수 있습니다.)`;
+                summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다.`;
                 finishLoading();
             }
         }
