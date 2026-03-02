@@ -38,14 +38,14 @@ app.post('/api/vision', async (req, res) => {
     }
 });
 
-// 2. 구글 Gemini API (글자 -> 요약) - 철통 방어 모드!
+// 2. 구글 Gemini API (글자 -> 요약) - 에러 원인 추적기 장착!
 app.post('/api/summarize', async (req, res) => {
     try {
         const text = req.body.text;
         const apiKey = process.env.GEMINI_API_KEY;
 
         if (!apiKey) {
-            return res.status(500).json({ error: '서버에 GEMINI_API_KEY가 없습니다.' });
+            return res.status(500).json({ error: 'Render에 GEMINI_API_KEY가 등록되지 않았습니다.' });
         }
 
         const prompt = `다음 영어 텍스트를 바탕으로, 스피킹 섀도잉 연습을 위한 1줄짜리 영어 요약본을 초급, 중급, 고급 3가지 레벨로 작성해. 
@@ -59,15 +59,17 @@ app.post('/api/summarize', async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
-                // Gemini에게 딴소리 금지, JSON만 주도록 강제!
                 generationConfig: { responseMimeType: "application/json" } 
             })
         });
 
         const data = await response.json();
         
+        // 🚨 구글이 튕겨냈을 때, 구글의 "진짜 에러 메시지(영어)"를 프론트엔드로 전달!
         if (!response.ok) {
-            return res.status(500).json({ error: 'Gemini API 호출 에러' });
+            console.error("Gemini API Error Detail:", data);
+            const realReason = data.error?.message || '원인 불명 에러';
+            return res.status(500).json({ error: `구글 AI의 진짜 답변: ${realReason}` });
         }
 
         const aiText = data.candidates[0].content.parts[0].text;
@@ -75,7 +77,7 @@ app.post('/api/summarize', async (req, res) => {
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'AI 요약본 생성 중 문제가 발생했습니다.' });
+        res.status(500).json({ error: '서버 내부 에러: ' + error.message });
     }
 });
 
