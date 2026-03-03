@@ -419,6 +419,12 @@
             }
         }
 
+        async function safeJson(res) {
+            const text = await res.text();
+            try { return JSON.parse(text); }
+            catch(e) { throw new Error('서버 응답 오류입니다. Render 재배포 후 다시 시도해주세요.'); }
+        }
+
         async function scoreRecording(btn, originalText) {
             try {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
@@ -430,9 +436,10 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ audio: base64Audio, mimeType: 'audio/webm' })
                 });
-                const transcribeData = await transcribeRes.json();
-                if (!transcribeRes.ok) throw new Error(transcribeData.error);
+                const transcribeData = await safeJson(transcribeRes);
+                if (!transcribeRes.ok) throw new Error(transcribeData.error || '음성 인식 실패');
                 const spokenText = transcribeData.text;
+                if (!spokenText) throw new Error('음성이 인식되지 않았습니다. 다시 말해주세요.');
 
                 // 2단계: 채점
                 const scoreRes = await fetch('/api/score', {
@@ -440,8 +447,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ original: originalText, spoken: spokenText })
                 });
-                const scoreData = await scoreRes.json();
-                if (!scoreRes.ok) throw new Error(scoreData.error);
+                const scoreData = await safeJson(scoreRes);
+                if (!scoreRes.ok) throw new Error(scoreData.error || '채점 실패');
 
                 btn.textContent = '🎤';
                 btn.classList.remove('scoring');
