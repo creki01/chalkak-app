@@ -188,7 +188,7 @@ app.post('/api/music', async (req, res) => {
 
         if (!ytApiKey || !geminiApiKey) return res.status(500).json({ error: 'API 키가 누락되었습니다. (.env 확인)' });
 
-        // 1. 유튜브 검색
+       // 1. 유튜브 검색 (이 부분은 동일)
         const ytSearchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query + ' official audio')}&type=video&key=${ytApiKey}&maxResults=1`;
         const ytRes = await fetch(ytSearchUrl);
         const ytData = await ytRes.json();
@@ -198,7 +198,20 @@ app.post('/api/music', async (req, res) => {
         }
         
         const videoId = ytData.items[0].id.videoId;
-        const videoTitle = ytData.items[0].snippet.title; // ⭐️ 유튜브가 실제로 찾은 영상 제목 추출
+        const videoTitle = ytData.items[0].snippet.title; 
+
+        // 2. AI 프롬프트 초강화 (여기부터 복사해서 덮어쓰세요)
+        const prompt = `다음은 유튜브 검색 결과로 나온 영상의 제목입니다: "${videoTitle}"
+        이 제목에서 불필요한 수식어(MV, Official, Audio, Live, Lyrics 등)를 완벽하게 무시하고, 진짜 '가수'와 '노래 제목'만 정확히 파악하세요.
+        그리고 그 노래의 실제 '원어 가사'만 처음부터 끝까지 제공하세요.
+        
+        [엄격한 규칙]
+        1. 가사가 아닌 다른 말(인사말, 부연 설명, 제목, 가수명 확인 등)은 단 한 글자도 출력하지 마세요.
+        2. [Verse 1], [Chorus] 같은 파트 구분 기호도 절대 넣지 마세요.
+        3. 오직 부를 수 있는 순수한 가사 텍스트만 줄바꿈하여 출력하세요.`;
+        
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+        // ... (아래 코드는 기존과 동일)
 
         // 2. 유튜브가 찾은 영상 제목을 AI에게 전달하여 가사 추출
         const prompt = `다음은 유튜브 영상 제목입니다: "${videoTitle}". 이 노래의 원어 가사를 제공해. 다른 부연 설명이나 제목, 가수 이름은 절대 적지 말고 오직 원어 가사 텍스트만 출력해.`;
@@ -229,4 +242,5 @@ app.post('/api/music', async (req, res) => {
 app.listen(port, () => {
     console.log(`🚀 서버 켜짐! 포트: ${port}`);
 });
+
 
