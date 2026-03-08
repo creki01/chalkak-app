@@ -174,19 +174,19 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐ 새롭게 추가된 API: 매일 5분 회화 테마 생성 (영어/일본어 공용)
+// ⭐ 오늘의 5분 회화 (에러 완벽 방어 버전)
 app.post('/api/daily-theme', async (req, res) => {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
+        if (!apiKey) return res.status(500).json({ error: '서버에 API 키가 설정되지 않았습니다.' });
 
         const language = req.body.language || "영어";
         const level = req.body.level || "초급";
 
         let levelGuidance = "";
         if (language === "영어") {
-            if (level === "초급") levelGuidance = "알파벳과 기초 단어만 아는 왕초보가 바로 써먹을 수 있는 아주 쉽고 짧은 영어 문장";
-            else if (level === "중급") levelGuidance = "해외여행이나 일상생활에서 자주 쓰는 자연스러운 영어 회화 문장";
+            if (level === "초급") levelGuidance = "알파벳과 기초 단어만 아는 왕초보가 바로 써먹을 수 있는 아주 쉽고 짧은 기초 영어 문장";
+            else if (level === "중급") levelGuidance = "기초적인 영문법을 알며, 해외여행이나 일상생활에서 자주 쓰는 자연스러운 영어 회화 문장";
             else if (level === "고급") levelGuidance = "비즈니스, 미팅, 깊은 대화 등에서 사용할 법한 세련되고 유창한 원어민 수준의 고급 영어 문장";
         } else {
             if (level === "초급") levelGuidance = "히라가나/가타카나를 갓 뗀 초보가 바로 써먹을 수 있는 아주 쉽고 짧은 기초 일본어 문장";
@@ -194,15 +194,16 @@ app.post('/api/daily-theme', async (req, res) => {
             else if (level === "고급") levelGuidance = "N1~N2 수준의 학습자가 비즈니스나 깊은 대화에서 사용할 법한 고급 일본어 문장";
         }
 
-        const prompt = `${language} 학습자를 위한 '오늘의 5분 ${language} 회화' 테마를 작성해. 
-선택된 난이도는 '${level}'이야. (${levelGuidance})
-난이도에 맞는 흥미롭고 실용적인 주제를 하나 선정하고, 그 상황에서 쓸 수 있는 ${language} 문장 3~5개를 제공해.
-다른 설명이나 인사말은 일절 생략하고, 오직 아래의 JSON 객체 형식만 정확하게 출력해.
+        const prompt = `${language} 교육 전문가로서 '오늘의 5분 ${language} 회화' 테마를 작성해줘. 
+난이도는 '${level}'이야. (${levelGuidance})
+위 난이도에 맞는 흥미롭고 실용적인 주제를 하나 선정하고, 그 상황에서 쓸 수 있는 ${language} 문장 3~5개를 작성해.
+
+반드시 다음 JSON 구조로만 대답해:
 {
-  "theme": "오늘의 주제 (예: 카페에서 주문하기)",
-  "description": "이 주제가 왜 유용한지 1~2줄 설명",
+  "theme": "주제명",
+  "description": "설명",
   "sentences": [
-    { "text": "${language} 원문", "translation": "한국어 번역", "pronunciation": "한국어 발음 표기" }
+    { "text": "원문", "translation": "한국어 뜻", "pronunciation": "한국어 발음" }
   ]
 }`;
 
@@ -212,7 +213,10 @@ app.post('/api/daily-theme', async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.7 }, 
+                generationConfig: { 
+                    temperature: 0.7,
+                    responseMimeType: "application/json" 
+                },
                 safetySettings: safetySettings 
             })
         });
@@ -220,36 +224,21 @@ app.post('/api/daily-theme', async (req, res) => {
         const data = await response.json();
         
         if (!response.ok) {
-            console.error("Gemini API HTTP Error:", data);
-            return res.status(500).json({ error: 'AI 응답 에러' });
+            console.error("Gemini API Error:", data);
+            return res.status(500).json({ error: 'AI 서버가 응답하지 않습니다. 잠시 후 다시 시도해주세요.' });
         }
 
         if (!data.candidates || !data.candidates[0]?.content) {
-            console.error("Gemini API Empty Response:", data);
-            return res.status(500).json({ error: 'AI가 응답을 생성하지 못했습니다.' });
+            return res.status(500).json({ error: 'AI가 문장을 생성하지 못했습니다.' });
         }
 
-        let aiText = data.candidates[0].content.parts[0].text;
-        
-        // 🚨 핵심 해결책: AI가 헛소리를 섞어 보내도 JSON 형태({ ... })만 강제로 뜯어냅니다.
-        let jsonMatch = aiText.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            console.error("No JSON found in response:", aiText);
-            return res.status(500).json({ error: '올바른 데이터를 찾지 못했습니다.' });
-        }
-        
-        let parsedData;
-        try {
-            parsedData = JSON.parse(jsonMatch[0]);
-        } catch (parseError) {
-            console.error("JSON Parse Error:", parseError, "Raw text:", jsonMatch[0]);
-            return res.status(500).json({ error: '데이터 번역 중 에러가 발생했습니다.' });
-        }
+        const aiText = data.candidates[0].content.parts[0].text;
+        const parsedData = JSON.parse(aiText);
 
         res.json(parsedData);
     } catch (error) {
-        console.error("Daily Theme Fetch Error:", error);
-        res.status(500).json({ error: '서버 내부 에러가 발생했습니다.' });
+        console.error("Daily Theme Try-Catch Error:", error);
+        res.status(500).json({ error: '데이터를 변환하는 중 오류가 발생했습니다.' });
     }
 });
 
@@ -358,4 +347,3 @@ app.post('/api/fetch-lyrics', async (req, res) => {
 app.listen(port, () => {
     console.log(`🚀 서버 켜짐! 포트: ${port}`);
 });
-
