@@ -25,7 +25,7 @@
         #summaryContainer { margin-top: 20px; text-align: left; background: #e3f2fd; padding: 20px; border-radius: 12px; display: none; }
         #summaryContainer h3 { margin-top: 0; color: #0d47a1; font-size: 18px;}
         
-        #loading { display: none; margin-top: 20px; color: #007aff; font-weight: bold; white-space: pre-wrap;}
+        #loading { display: none; margin-top: 20px; color: #007aff; font-weight: bold; white-space: pre-wrap; margin-bottom: 20px;}
         .speed-control { margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: bold; color: #333;}
         select { padding: 8px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; outline: none; }
         
@@ -43,44 +43,23 @@
         .word-pron { color: #888; font-size: 13px; }
         .delete-btn { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 16px; color: #ff3b30; cursor: pointer; }
         
-        #translateControl { 
-            display: flex; 
-            align-items: center; 
-            overflow-x: auto; 
-            background: #f1f3f5; 
-            padding: 12px; 
-            border-radius: 12px; 
-            margin-bottom: 20px; 
-            white-space: nowrap; 
-            -ms-overflow-style: none; 
-            scrollbar-width: none; 
-        }
+        #translateControl { display: flex; align-items: center; overflow-x: auto; background: #f1f3f5; padding: 12px; border-radius: 12px; margin-bottom: 20px; white-space: nowrap; -ms-overflow-style: none; scrollbar-width: none; }
         #translateControl::-webkit-scrollbar { display: none; }
         
-        .lang-btn {
-            background: white; border: 1px solid #ddd; padding: 8px 14px; border-radius: 20px; 
-            margin-right: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: #555; transition: 0.2s;
-        }
+        .lang-btn { background: white; border: 1px solid #ddd; padding: 8px 14px; border-radius: 20px; margin-right: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: #555; transition: 0.2s; }
         .lang-btn.active { background: #007aff; color: white; border-color: #007aff; }
 
-        .music-search-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .music-search-container input {
-            flex: 1;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            font-size: 16px;
-        }
-        .music-search-container button {
-            width: auto;
-            margin-bottom: 0;
-            padding: 12px 20px;
-            background: #9c27b0;
-        }
+        .music-search-container { display: flex; gap: 10px; margin-bottom: 10px; }
+        .music-search-container input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; }
+        .music-search-container button { width: auto; margin-bottom: 0; padding: 12px 20px; background: #9c27b0; }
+
+        #searchResults { display: none; margin-bottom: 20px; text-align: left; }
+        .video-item { display: flex; align-items: center; padding: 10px; background: white; border-radius: 12px; margin-bottom: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: background-color 0.2s; border: 1px solid #eee;}
+        .video-item:active { background: #e3f2fd; }
+        .video-thumb { width: 120px; height: 68px; border-radius: 8px; object-fit: cover; margin-right: 15px; }
+        .video-info { flex: 1; overflow: hidden; }
+        .video-title { font-size: 15px; font-weight: bold; color: #333; margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .video-channel { font-size: 13px; color: #888; margin: 0; }
     </style>
 </head>
 <body>
@@ -102,9 +81,11 @@
             <button class="btn btn-orange" onclick="document.getElementById('audioInput').click()">🎵 녹음 / 음성 파일 불러오기</button>
 
             <div class="music-search-container">
-                <input type="text" id="musicSearchInput" placeholder="🎧 가수와 제목을 입력하세요 (예: 아이유 밤편지)">
-                <button class="btn" onclick="searchMusic()">음악 검색</button>
+                <input type="text" id="musicSearchInput" placeholder="🎧 노래 검색 (예: 하동균 나비야)">
+                <button class="btn" onclick="searchMusic()">검색</button>
             </div>
+
+            <div id="searchResults"></div>
 
             <div id="youtubePlayerContainer" style="display: none; margin-bottom: 20px;">
                 <iframe id="youtubePlayer" width="100%" height="200" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="border-radius: 12px;"></iframe>
@@ -168,6 +149,7 @@
         const loading = document.getElementById('loading');
         const speedSelect = document.getElementById('speedSelect');
         const wordList = document.getElementById('wordList');
+        const searchResultsContainer = document.getElementById('searchResults');
         
         let sentences = []; 
         let sequentialIndex = -1; 
@@ -211,6 +193,7 @@
             stopSpeech();
             resetLanguageButtons();
             document.getElementById('youtubePlayerContainer').style.display = 'none';
+            searchResultsContainer.style.display = 'none';
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -228,6 +211,7 @@
             stopSpeech();
             preview.style.display = 'none';
             document.getElementById('youtubePlayerContainer').style.display = 'none';
+            searchResultsContainer.style.display = 'none';
             resetLanguageButtons();
 
             const reader = new FileReader();
@@ -241,29 +225,72 @@
 
         async function searchMusic() {
             const query = document.getElementById('musicSearchInput').value;
-            if (!query.trim()) return alert("가수와 제목을 입력해주세요!");
+            if (!query.trim()) return alert("검색어를 입력해주세요!");
 
             stopSpeech();
             resetLanguageButtons();
             preview.style.display = 'none'; 
+            document.getElementById('youtubePlayerContainer').style.display = 'none';
+            resultContainer.style.display = 'none';
+            searchResultsContainer.style.display = 'none';
             
-            loading.innerText = '🎵 유튜브에서 음악을 찾고 AI가 가사를 적고 있습니다...\n(약 5~10초 소요)';
-            startLoading();
+            loading.innerText = '🎵 유튜브에서 관련된 영상을 찾고 있습니다...';
+            loading.style.display = 'block';
 
             try {
-                const response = await fetch('/api/music', {
+                const response = await fetch('/api/search-youtube', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: query })
                 });
                 const data = await response.json();
                 
-                if (!response.ok) throw new Error(data.error || '음악 검색 실패');
+                if (!response.ok) throw new Error(data.error || '목록 검색 실패');
 
-                const ytContainer = document.getElementById('youtubePlayerContainer');
-                const ytPlayer = document.getElementById('youtubePlayer');
-                ytPlayer.src = `https://www.youtube.com/embed/${data.videoId}?autoplay=1`;
-                ytContainer.style.display = 'block';
+                searchResultsContainer.innerHTML = '<h3 style="margin-top:0; color:#555; font-size:15px;">👇 원하는 영상을 선택하세요</h3>';
+                data.results.forEach(video => {
+                    const safeTitle = video.title.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    const item = document.createElement('div');
+                    item.className = 'video-item';
+                    item.innerHTML = `
+                        <img src="${video.thumbnail}" class="video-thumb" alt="썸네일">
+                        <div class="video-info">
+                            <p class="video-title">${video.title}</p>
+                            <p class="video-channel">${video.channelTitle}</p>
+                        </div>
+                    `;
+                    item.onclick = () => selectVideo(video.videoId, safeTitle);
+                    searchResultsContainer.appendChild(item);
+                });
+
+                loading.style.display = 'none';
+                searchResultsContainer.style.display = 'block';
+
+            } catch (error) {
+                loading.innerText = '오류: ' + error.message;
+            }
+        }
+
+        async function selectVideo(videoId, videoTitle) {
+            searchResultsContainer.style.display = 'none'; 
+            
+            const ytContainer = document.getElementById('youtubePlayerContainer');
+            const ytPlayer = document.getElementById('youtubePlayer');
+            ytPlayer.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+            ytContainer.style.display = 'block';
+
+            loading.innerText = '⏳ 영상을 재생하며 가사를 추출 중입니다...';
+            startLoading();
+
+            try {
+                const response = await fetch('/api/fetch-lyrics', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ videoTitle: videoTitle })
+                });
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.error || '가사 추출 실패');
 
                 handleExtractedText(data.lyrics);
 
