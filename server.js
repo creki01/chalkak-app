@@ -179,7 +179,7 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐️ 유튜브 음악 검색 및 가사 추출 API (동기화 개선 버전)
+// ⭐️ 유튜브 음악 검색 및 가사 추출 API (AI 지휘자 동기화 버전)
 app.post('/api/music', async (req, res) => {
     try {
         const { query } = req.body;
@@ -188,34 +188,19 @@ app.post('/api/music', async (req, res) => {
 
         if (!ytApiKey || !geminiApiKey) return res.status(500).json({ error: 'API 키가 누락되었습니다. (.env 확인)' });
 
-       // 1. 유튜브 검색 (이 부분은 동일)
-        const ytSearchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query + ' official audio')}&type=video&key=${ytApiKey}&maxResults=1`;
-        const ytRes = await fetch(ytSearchUrl);
-        const ytData = await ytRes.json();
-        
-        if (!ytData.items || ytData.items.length === 0) {
-             return res.status(404).json({ error: '음악을 찾을 수 없습니다.' });
-        }
-        
-        const videoId = ytData.items[0].id.videoId;
-        const videoTitle = ytData.items[0].snippet.title; 
-
-        // 2. AI 프롬프트 초강화 (여기부터 복사해서 덮어쓰세요)
-        const prompt = `다음은 유튜브 검색 결과로 나온 영상의 제목입니다: "${videoTitle}"
-        이 제목에서 불필요한 수식어(MV, Official, Audio, Live, Lyrics 등)를 완벽하게 무시하고, 진짜 '가수'와 '노래 제목'만 정확히 파악하세요.
-        그리고 그 노래의 실제 '원어 가사'만 처음부터 끝까지 제공하세요.
+        // 1. AI(제미나이)에게 먼저 곡을 확정하고 가사를 뽑으라고 지시
+        const prompt = `사용자가 "${query}"라고 음악을 검색했습니다. 
+        가장 유명하고 연관성 높은 1개의 곡을 골라, 그 곡의 '가수', '제목', 그리고 '원어 가사'를 JSON 형식으로만 반환하세요.
         
         [엄격한 규칙]
-        1. 가사가 아닌 다른 말(인사말, 부연 설명, 제목, 가수명 확인 등)은 단 한 글자도 출력하지 마세요.
-        2. [Verse 1], [Chorus] 같은 파트 구분 기호도 절대 넣지 마세요.
-        3. 오직 부를 수 있는 순수한 가사 텍스트만 줄바꿈하여 출력하세요.`;
-        
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
-        // ... (아래 코드는 기존과 동일)
+        1. 가사에는 [Verse 1], [Chorus] 같은 파트 구분 기호나 부연 설명을 절대 넣지 마세요.
+        2. 반드시 아래 JSON 형식으로만 출력하세요. 마크다운(\`\`\`) 기호도 쓰지 마세요.
+        {
+          "artist": "가수 이름",
+          "title": "노래 제목",
+          "lyrics": "가사 텍스트 (줄바꿈 포함)"
+        }`;
 
-        // 2. 유튜브가 찾은 영상 제목을 AI에게 전달하여 가사 추출
-        const prompt = `다음은 유튜브 영상 제목입니다: "${videoTitle}". 이 노래의 원어 가사를 제공해. 다른 부연 설명이나 제목, 가수 이름은 절대 적지 말고 오직 원어 가사 텍스트만 출력해.`;
-        
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
         const geminiRes = await fetch(geminiEndpoint, {
             method: 'POST',
@@ -227,14 +212,31 @@ app.post('/api/music', async (req, res) => {
         });
         
         const geminiData = await geminiRes.json();
-        if (!geminiData.candidates) throw new Error('가사를 불러오지 못했습니다.');
+        if (!geminiData.candidates) throw new Error('AI가 곡 정보를 찾지 못했습니다.');
         
-        const lyrics = geminiData.candidates[0].content.parts[0].text;
+        // AI가 준 JSON 데이터 파싱
+        let aiText = geminiData.candidates[0].content.parts[0].text;
+        aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const songInfo = JSON.parse(aiText);
 
-        res.json({ videoId: videoId, lyrics: lyrics });
+        // 2. AI가 확정한 '가수 + 제목'으로 유튜브 검색
+        const exactSearchQuery = `${songInfo.artist} ${songInfo.title} official audio`;
+        const ytSearchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(exactSearchQuery)}&type=video&key=${ytApiKey}&maxResults=1`;
+        
+        const ytRes = await fetch(ytSearchUrl);
+        const ytData = await ytRes.json();
+        
+        if (!ytData.items || ytData.items.length === 0) {
+             return res.status(404).json({ error: '유튜브에서 해당 영상(음원)을 찾을 수 없습니다.' });
+        }
+        
+        const videoId = ytData.items[0].id.videoId;
+
+        // 3. 찾아낸 영상과 AI가 뽑은 가사를 프론트로 전달
+        res.json({ videoId: videoId, lyrics: songInfo.lyrics });
 
     } catch (error) {
-        console.error(error);
+        console.error("Music API Error:", error);
         res.status(500).json({ error: '음악 검색 중 서버 에러가 발생했습니다.' });
     }
 });
@@ -242,5 +244,3 @@ app.post('/api/music', async (req, res) => {
 app.listen(port, () => {
     console.log(`🚀 서버 켜짐! 포트: ${port}`);
 });
-
-
