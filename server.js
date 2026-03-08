@@ -105,13 +105,7 @@ app.post('/api/summarize', async (req, res) => {
         const data = await response.json();
         if (!data.candidates) throw new Error('AI 검열 차단됨');
         
-        let aiText = data.candidates[0].content.parts[0].text;
-        
-        // 마크다운 제거 로직 추가
-        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) aiText = jsonMatch[0];
-
+        const aiText = data.candidates[0].content.parts[0].text;
         res.json(JSON.parse(aiText));
     } catch (error) {
         res.status(500).json({ error: 'AI 요약 에러' });
@@ -143,13 +137,7 @@ app.post('/api/translate', async (req, res) => {
         });
 
         const data = await response.json();
-        let aiText = data.candidates[0].content.parts[0].text;
-
-        // 마크다운 제거 로직 추가
-        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) aiText = jsonMatch[0];
-
+        const aiText = data.candidates[0].content.parts[0].text;
         res.json(JSON.parse(aiText));
     } catch (error) {
         res.status(500).json({ error: '단어장 번역 에러' });
@@ -186,7 +174,7 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐ 오늘의 5분 회화 (에러 완벽 방어 버전)
+// ⭐ 오늘의 5분 회화
 app.post('/api/daily-theme', async (req, res) => {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
@@ -226,8 +214,8 @@ app.post('/api/daily-theme', async (req, res) => {
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
-                    temperature: 0.7,
-                    responseMimeType: "application/json" 
+                    temperature: 0.7
+                    // ✅ responseMimeType 제거 - gemini-2.5-flash에서 두 번째 호출부터 오류 유발
                 },
                 safetySettings: safetySettings 
             })
@@ -244,14 +232,10 @@ app.post('/api/daily-theme', async (req, res) => {
             return res.status(500).json({ error: 'AI가 문장을 생성하지 못했습니다.' });
         }
 
-        let aiText = data.candidates[0].content.parts[0].text;
-        
-        // 마크다운 제거 로직 추가
-        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) aiText = jsonMatch[0];
-
-        const parsedData = JSON.parse(aiText);
+        const aiText = data.candidates[0].content.parts[0].text;
+        // ✅ 마크다운 코드블록 제거 후 파싱
+        const cleanText = aiText.replace(/```json|```/g, '').trim();
+        const parsedData = JSON.parse(cleanText);
 
         res.json(parsedData);
     } catch (error) {
