@@ -174,21 +174,34 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐ 새롭게 추가된 API: 왕초보 매일 5분 회화 테마 생성
 app.post('/api/daily-theme', async (req, res) => {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return res.status(500).json({ error: 'API 키 누락' });
 
-        const prompt = `왕초보 영어 학습자를 위한 '오늘의 5분 기초 회화' 테마를 하나 정해서 작성해. 
-        매일 다른 일상적인 주제(예: 카페에서 주문하기, 길 묻기, 식당 예약하기, 처음 만난 사람과 인사하기 등)를 선정해줘.
-        왕초보가 바로 써먹을 수 있는 아주 쉽고 실용적인 영어 문장 3~5개를 제공해줘.
-        반드시 아래 JSON 형식으로만 대답해.
+        const language = req.body.language || "영어";
+        const level = req.body.level || "초급";
+
+        let levelGuidance = "";
+        if (language === "영어") {
+            if (level === "초급") levelGuidance = "알파벳과 기초 단어만 아는 왕초보가 바로 써먹을 수 있는 아주 쉽고 짧은 기초 영어 문장";
+            else if (level === "중급") levelGuidance = "기초적인 영문법을 알며, 해외여행이나 일상생활에서 자주 쓰는 자연스러운 영어 회화 문장";
+            else if (level === "고급") levelGuidance = "비즈니스, 미팅, 깊은 대화 등에서 사용할 법한 세련되고 유창한 원어민 수준의 고급 영어 문장";
+        } else {
+            if (level === "초급") levelGuidance = "히라가나/가타카나를 갓 뗀 초보가 바로 써먹을 수 있는 아주 쉽고 짧은 기초 일본어 문장";
+            else if (level === "중급") levelGuidance = "N3~N4 수준의 학습자가 일상생활에서 자주 쓰는 자연스러운 일본어 회화 문장";
+            else if (level === "고급") levelGuidance = "N1~N2 수준의 학습자가 비즈니스나 깊은 대화에서 사용할 법한 고급 일본어 문장";
+        }
+
+        const prompt = `${language} 학습자를 위한 '오늘의 5분 ${language} 회화' 테마를 작성해. 
+        선택된 난이도는 '${level}'이야. (${levelGuidance})
+        난이도에 맞는 흥미롭고 실용적인 주제를 하나 선정하고, 그 상황에서 쓸 수 있는 ${language} 문장 3~5개를 제공해줘.
+        반드시 아래 JSON 형식으로만 대답해. 마크다운(\`\`\`json 등)은 절대 쓰지마.
         {
-          "theme": "오늘의 주제 (예: 카페에서 커피 주문하기)",
-          "description": "이 주제가 왜 유용한지, 언제 쓰는지 아주 짧게 1~2줄 설명",
+          "theme": "오늘의 주제",
+          "description": "이 주제가 왜 유용한지 1~2줄 설명",
           "sentences": [
-            { "text": "영어 문장", "translation": "한국어 뜻", "pronunciation": "한국어 발음 표기(예: 아이 라이크 잇)" }
+            { "text": "${language} 원문", "translation": "한국어 번역", "pronunciation": "한국어 발음 표기" }
           ]
         }`;
 
@@ -198,16 +211,24 @@ app.post('/api/daily-theme', async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" },
+                generationConfig: { temperature: 0.7, responseMimeType: "application/json" },
                 safetySettings: safetySettings 
             })
         });
 
         const data = await response.json();
-        const aiText = data.candidates[0].content.parts[0].text;
+        
+        if (!data.candidates || !data.candidates[0]?.content) {
+            return res.status(500).json({ error: 'AI가 응답을 생성하지 못했습니다.' });
+        }
+
+        let aiText = data.candidates[0].content.parts[0].text;
+        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
         res.json(JSON.parse(aiText));
     } catch (error) {
-        res.status(500).json({ error: '일일 테마 생성 에러' });
+        console.error("Daily Theme Error:", error);
+        res.status(500).json({ error: '일일 테마 생성 에러가 발생했습니다.' });
     }
 });
 
@@ -234,7 +255,6 @@ app.post('/api/search-youtube', async (req, res) => {
 
         res.json({ results });
     } catch (error) {
-        console.error("YouTube Search Error:", error);
         res.status(500).json({ error: '유튜브 검색 중 에러가 발생했습니다.' });
     }
 });
@@ -246,51 +266,30 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         const cleanTitle = videoTitle.replace(/\[.*?\]|\(.*?\)/g, '').replace(/official|audio|video|lyrics|mv|hd|4k/gi, '').trim();
         const artistName = channelTitle.replace(/official|channel|VEVO|music/gi, '').trim();
 
-        // ── STEP 1: LRCLIB (무료 글로벌 가사 DB) ──────────────────────────
         try {
-            const queries = [
-                `${artistName} ${cleanTitle}`,
-                cleanTitle,
-                `${channelTitle} ${cleanTitle}`
-            ];
-
+            const queries = [`${artistName} ${cleanTitle}`, cleanTitle, `${channelTitle} ${cleanTitle}`];
             for (const q of queries) {
                 const lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(q)}`;
-                const lrclibRes = await fetch(lrclibUrl, {
-                    headers: { 'User-Agent': 'SeanSpeakingApp/1.0' },
-                    signal: AbortSignal.timeout(8000)
-                });
-                
+                const lrclibRes = await fetch(lrclibUrl, { headers: { 'User-Agent': 'SeanSpeakingApp/1.0' }, signal: AbortSignal.timeout(8000) });
                 if (lrclibRes.ok) {
                     const lrclibData = await lrclibRes.json();
                     if (lrclibData && lrclibData.length > 0) {
                         const bestMatch = lrclibData.find(song => song.plainLyrics);
-                        if (bestMatch?.plainLyrics) {
-                            return res.json({ lyrics: bestMatch.plainLyrics, source: 'lrclib' });
-                        }
+                        if (bestMatch?.plainLyrics) return res.json({ lyrics: bestMatch.plainLyrics, source: 'lrclib' });
                     }
                 }
             }
-        } catch (lrclibErr) {
-            console.log(`LRCLIB 연결 실패`);
-        }
+        } catch (lrclibErr) {}
 
-        // ── STEP 2: Lyrics.ovh (가사 API, 무료) ───────────────────────────
         try {
             const ovhUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(artistName)}/${encodeURIComponent(cleanTitle)}`;
             const ovhRes = await fetch(ovhUrl, { signal: AbortSignal.timeout(8000) });
-            
             if (ovhRes.ok) {
                 const ovhData = await ovhRes.json();
-                if (ovhData.lyrics && ovhData.lyrics.trim().length > 20) {
-                    return res.json({ lyrics: ovhData.lyrics.trim(), source: 'lyrics.ovh' });
-                }
+                if (ovhData.lyrics && ovhData.lyrics.trim().length > 20) return res.json({ lyrics: ovhData.lyrics.trim(), source: 'lyrics.ovh' });
             }
-        } catch (ovhErr) {
-            console.log(`Lyrics.ovh 연결 실패`);
-        }
+        } catch (ovhErr) {}
 
-        // ── STEP 3: Gemini AI 폴백 ────────────────────────────────────────
         const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) return res.status(500).json({ error: 'Gemini API 키가 설정되지 않았습니다.' });
 
@@ -300,7 +299,6 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         const prompt = `음악 정보 전문가로서 다음 곡의 가사를 알려주세요.
 곡 제목: "${cleanTitle}"
 아티스트: "${artistName}"
-
 아래 규칙을 반드시 따르세요:
 1. ${langHint} 가사 원문만 출력하세요.
 2. [Verse], [Chorus] 같은 파트 태그, 줄번호, 설명 문구를 절대 포함하지 마세요.
@@ -321,19 +319,12 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         
         const geminiData = await geminiRes.json();
         
-        if (!geminiRes.ok) {
-            return res.status(500).json({ error: `Gemini API 오류: ${geminiData.error?.message || geminiRes.status}` });
-        }
-
-        if (!geminiData.candidates || !geminiData.candidates[0]?.content) {
-            return res.status(500).json({ error: `AI가 이 곡의 가사 제공을 거부했습니다.` });
-        }
+        if (!geminiRes.ok) return res.status(500).json({ error: `Gemini API 오류: ${geminiData.error?.message || geminiRes.status}` });
+        if (!geminiData.candidates || !geminiData.candidates[0]?.content) return res.status(500).json({ error: `AI가 이 곡의 가사 제공을 거부했습니다.` });
         
         let lyrics = geminiData.candidates[0].content.parts[0].text.trim();
         
-        if (lyrics === 'UNKNOWN' || lyrics.length < 20) {
-            return res.status(404).json({ error: `"${cleanTitle}" 가사를 찾을 수 없습니다.` });
-        }
+        if (lyrics === 'UNKNOWN' || lyrics.length < 20) return res.status(404).json({ error: `"${cleanTitle}" 가사를 찾을 수 없습니다.` });
 
         lyrics = lyrics.replace(/```[^`]*```/g, '').replace(/\[.*?\]/g, '').replace(/^\s*[\r\n]/gm, '\n').trim();
         res.json({ lyrics, source: 'gemini' });
