@@ -179,7 +179,7 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐️ 유튜브 음악 검색 및 가사 추출 API
+// ⭐️ 유튜브 음악 검색 및 가사 추출 API (동기화 개선 버전)
 app.post('/api/music', async (req, res) => {
     try {
         const { query } = req.body;
@@ -188,6 +188,7 @@ app.post('/api/music', async (req, res) => {
 
         if (!ytApiKey || !geminiApiKey) return res.status(500).json({ error: 'API 키가 누락되었습니다. (.env 확인)' });
 
+        // 1. 유튜브 검색
         const ytSearchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query + ' official audio')}&type=video&key=${ytApiKey}&maxResults=1`;
         const ytRes = await fetch(ytSearchUrl);
         const ytData = await ytRes.json();
@@ -195,9 +196,13 @@ app.post('/api/music', async (req, res) => {
         if (!ytData.items || ytData.items.length === 0) {
              return res.status(404).json({ error: '음악을 찾을 수 없습니다.' });
         }
+        
         const videoId = ytData.items[0].id.videoId;
+        const videoTitle = ytData.items[0].snippet.title; // ⭐️ 유튜브가 실제로 찾은 영상 제목 추출
 
-        const prompt = `"${query}"라는 노래의 원어 가사를 제공해. 다른 부연 설명이나 제목, 가수 이름은 절대 적지 말고 오직 원어 가사 텍스트만 출력해.`;
+        // 2. 유튜브가 찾은 영상 제목을 AI에게 전달하여 가사 추출
+        const prompt = `다음은 유튜브 영상 제목입니다: "${videoTitle}". 이 노래의 원어 가사를 제공해. 다른 부연 설명이나 제목, 가수 이름은 절대 적지 말고 오직 원어 가사 텍스트만 출력해.`;
+        
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
         const geminiRes = await fetch(geminiEndpoint, {
             method: 'POST',
@@ -224,3 +229,4 @@ app.post('/api/music', async (req, res) => {
 app.listen(port, () => {
     console.log(`🚀 서버 켜짐! 포트: ${port}`);
 });
+
