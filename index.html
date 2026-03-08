@@ -8,7 +8,7 @@
         body { font-family: sans-serif; text-align: center; padding: 0; background: #f8f9fa; margin: 0; }
         
         .nav-bar { display: flex; background: white; border-bottom: 2px solid #eee; position: sticky; top: 0; z-index: 100; }
-        .nav-tab { flex: 1; padding: 15px; font-size: 16px; font-weight: bold; color: #888; cursor: pointer; border-bottom: 3px solid transparent; }
+        .nav-tab { flex: 1; padding: 15px 5px; font-size: 15px; font-weight: bold; color: #888; cursor: pointer; border-bottom: 3px solid transparent; }
         .nav-tab.active { color: #007aff; border-bottom: 3px solid #007aff; }
 
         .container { padding: 20px; }
@@ -60,12 +60,16 @@
         .video-info { flex: 1; overflow: hidden; }
         .video-title { font-size: 15px; font-weight: bold; color: #333; margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .video-channel { font-size: 13px; color: #888; margin: 0; }
+
+        .daily-header { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: left; border-left: 5px solid #ff9500; }
+        .daily-title { margin-top: 0; color: #333; font-size: 20px; }
     </style>
 </head>
 <body>
 
     <div class="nav-bar">
         <div class="nav-tab active" id="tabHome" onclick="switchTab('home')">📸 카메라 모드</div>
+        <div class="nav-tab" id="tabDaily" onclick="switchTab('daily')">📅 오늘의 회화</div>
         <div class="nav-tab" id="tabWordbook" onclick="switchTab('wordbook')">⭐️ 내 단어장</div>
     </div>
 
@@ -104,10 +108,6 @@
                     <button class="lang-btn" onclick="selectLanguage(this, 'ja-JP', '일본어')">🇯🇵 일본어</button>
                     <button class="lang-btn" onclick="selectLanguage(this, 'zh-CN', '중국어')">🇨🇳 중국어</button>
                     <button class="lang-btn" onclick="selectLanguage(this, 'es-ES', '스페인어')">🇪🇸 스페인어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'ru-RU', '러시아어')">🇷🇺 러시아어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'vi-VN', '베트남어')">🇻🇳 베트남어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'de-DE', '독일어')">🇩🇪 독일어</button>
-                    <button class="lang-btn" onclick="selectLanguage(this, 'fr-FR', '프랑스어')">🇫🇷 프랑스어</button>
                 </div>
 
                 <div id="resultText"></div>
@@ -129,6 +129,19 @@
                 <button class="btn btn-green" style="width: 100%;" onclick="playAllSpeech()">🔊 전체 처음부터 듣기</button>
                 <button class="btn" style="background-color: #8e8e93; width: 100%;" onclick="stopSpeech()">⏹️ 모든 발음 정지</button>
             </div>
+        </div>
+
+        <div id="dailyView" style="display: none; text-align: left;">
+            <div class="daily-header">
+                <h2 class="daily-title" id="dailyThemeTitle">⏳ 테마 준비 중...</h2>
+                <p id="dailyThemeDesc" style="color: #666; font-size: 14px; margin: 5px 0 0 0;"></p>
+            </div>
+            
+            <p style="color:#666; font-size:14px; text-align:center;">(문장을 터치하면 무한반복 재생됩니다)</p>
+            <div id="dailySentences"></div>
+            
+            <button class="btn btn-orange" style="margin-top: 20px;" onclick="loadDailyTheme(true)">🔄 다른 주제로 추천받기</button>
+            <button class="btn" style="background-color: #8e8e93;" onclick="stopSpeech()">⏹️ 발음 정지</button>
         </div>
 
         <div id="wordbookView" style="display: none;">
@@ -163,18 +176,127 @@
             stopSpeech();
             document.getElementById('tabHome').classList.remove('active');
             document.getElementById('tabWordbook').classList.remove('active');
+            document.getElementById('tabDaily').classList.remove('active');
             document.getElementById('homeView').style.display = 'none';
             document.getElementById('wordbookView').style.display = 'none';
+            document.getElementById('dailyView').style.display = 'none';
 
             if (tab === 'home') {
                 document.getElementById('tabHome').classList.add('active');
                 document.getElementById('homeView').style.display = 'block';
+            } else if (tab === 'daily') {
+                document.getElementById('tabDaily').classList.add('active');
+                document.getElementById('dailyView').style.display = 'block';
+                loadDailyTheme(); // 테마 로드 (캐시 확인)
             } else {
                 document.getElementById('tabWordbook').classList.add('active');
                 document.getElementById('wordbookView').style.display = 'block';
                 renderWordbook(); 
             }
         }
+
+        // --- ⭐ 오늘의 회화 로직 시작 ---
+        async function loadDailyTheme(forceRefresh = false) {
+            const titleEl = document.getElementById('dailyThemeTitle');
+            const descEl = document.getElementById('dailyThemeDesc');
+            const listEl = document.getElementById('dailySentences');
+
+            // 오늘 날짜 구하기 (YYYY-MM-DD)
+            const today = new Date().toISOString().split('T')[0];
+            let cached = localStorage.getItem('chalkakDailyTheme');
+            
+            // 캐시가 있고, 오늘 날짜이며, 강제 새로고침이 아닐 경우 캐시 데이터 사용
+            if (cached && !forceRefresh) {
+                let parsed = JSON.parse(cached);
+                if (parsed.date === today) {
+                    renderDailyThemeList(parsed.data);
+                    return;
+                }
+            }
+
+            titleEl.innerText = '⏳ AI 선생님이 오늘의 테마를 짓고 있어요...';
+            descEl.innerText = '';
+            listEl.innerHTML = '';
+
+            try {
+                const res = await fetch('/api/daily-theme', { method: 'POST' });
+                const data = await res.json();
+                
+                if (!res.ok) throw new Error(data.error);
+
+                // 결과 로컬 스토리지에 저장 (캐싱)
+                localStorage.setItem('chalkakDailyTheme', JSON.stringify({ date: today, data: data }));
+                renderDailyThemeList(data);
+            } catch (error) {
+                titleEl.innerText = '테마를 불러오지 못했습니다 😢';
+                descEl.innerText = '다시 시도해주세요.';
+            }
+        }
+
+        function renderDailyThemeList(data) {
+            document.getElementById('dailyThemeTitle').innerText = `🎯 ${data.theme}`;
+            document.getElementById('dailyThemeDesc').innerText = data.description;
+            
+            const listEl = document.getElementById('dailySentences');
+            listEl.innerHTML = '';
+
+            data.sentences.forEach((item) => {
+                const div = document.createElement('div');
+                div.className = 'word-item';
+                
+                const pronHtml = (item.pronunciation && item.pronunciation.trim() !== '') 
+                                 ? `<div class="word-pron">[${item.pronunciation}]</div>` 
+                                 : '';
+
+                div.innerHTML = `
+                    <div class="word-text sentence" data-lang="en-US">${item.text}</div>
+                    <div class="word-trans">${item.translation}</div>
+                    ${pronHtml}
+                `;
+
+                // 문장 클릭 시 발음 재생
+                const textSpan = div.querySelector('.word-text');
+                textSpan.onclick = function() { toggleLoop(item.text, this); };
+
+                // 단어장 저장(별) 버튼 추가
+                const starBtn = document.createElement('button');
+                starBtn.className = 'star-btn';
+                starBtn.style.position = 'absolute';
+                starBtn.style.top = '15px';
+                starBtn.style.right = '15px';
+                starBtn.innerText = '⭐️';
+                
+                if (myWordbook.some(wb => wb.text === item.text)) {
+                    starBtn.classList.add('saved');
+                }
+                
+                starBtn.onclick = function() { toggleStarDaily(item, this); };
+                div.appendChild(starBtn);
+
+                listEl.appendChild(div);
+            });
+        }
+
+        function toggleStarDaily(item, btnElement) {
+            const isSaved = myWordbook.some(wb => wb.text === item.text);
+            
+            if (isSaved) {
+                myWordbook = myWordbook.filter(wb => wb.text !== item.text);
+                localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
+                btnElement.classList.remove('saved');
+                return;
+            }
+
+            // 번역과 발음이 이미 있으므로 API 호출 없이 바로 단어장에 추가
+            myWordbook.unshift({
+                text: item.text,
+                translation: item.translation,
+                pronunciation: item.pronunciation
+            });
+            localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
+            btnElement.classList.add('saved');
+        }
+        // --- ⭐ 오늘의 회화 로직 끝 ---
 
         function getLang(text) {
             if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
@@ -184,7 +306,9 @@
 
         function resetLanguageButtons() {
             document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelector('.lang-btn').classList.add('active'); 
+            if(document.querySelector('.lang-btn')) {
+                document.querySelector('.lang-btn').classList.add('active'); 
+            }
         }
 
         imageInput.addEventListener('change', function(event) {
