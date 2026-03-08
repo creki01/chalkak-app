@@ -250,6 +250,9 @@
                 searchResultsContainer.innerHTML = '<h3 style="margin-top:0; color:#555; font-size:15px;">👇 원하는 영상을 선택하세요</h3>';
                 data.results.forEach(video => {
                     const safeTitle = video.title.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    // ⭐️ 업데이트: 채널명도 안전하게 넘기기
+                    const safeChannel = video.channelTitle.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    
                     const item = document.createElement('div');
                     item.className = 'video-item';
                     item.innerHTML = `
@@ -259,7 +262,8 @@
                             <p class="video-channel">${video.channelTitle}</p>
                         </div>
                     `;
-                    item.onclick = () => selectVideo(video.videoId, safeTitle);
+                    // ⭐️ 업데이트: 클릭 시 영상 제목과 '채널명' 둘 다 넘김
+                    item.onclick = () => selectVideo(video.videoId, safeTitle, safeChannel);
                     searchResultsContainer.appendChild(item);
                 });
 
@@ -271,7 +275,8 @@
             }
         }
 
-        async function selectVideo(videoId, videoTitle) {
+        // ⭐️ 업데이트: 채널명(channelTitle)을 함께 서버로 전송
+        async function selectVideo(videoId, videoTitle, channelTitle) {
             searchResultsContainer.style.display = 'none'; 
             
             const ytContainer = document.getElementById('youtubePlayerContainer');
@@ -279,14 +284,14 @@
             ytPlayer.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
             ytContainer.style.display = 'block';
 
-            loading.innerText = '⏳ 영상을 재생하며 가사를 추출 중입니다...';
+            loading.innerText = '⏳ 영상을 재생하며 1절부터 가사를 추출 중입니다...';
             startLoading();
 
             try {
                 const response = await fetch('/api/fetch-lyrics', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ videoTitle: videoTitle })
+                    body: JSON.stringify({ videoTitle: videoTitle, channelTitle: channelTitle }) // 채널명 추가 전송
                 });
                 const data = await response.json();
                 
