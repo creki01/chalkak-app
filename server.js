@@ -202,7 +202,7 @@ app.post('/api/search-youtube', async (req, res) => {
     }
 });
 
-// ⭐️ 업데이트: 문제를 일으킨 검색(Tools) 기능을 완전히 제거하고, 프롬프트의 퀄리티를 극대화
+// 가사 추출 및 저작권 필터 우회
 app.post('/api/fetch-lyrics', async (req, res) => {
     try {
         const { videoTitle, channelTitle } = req.body;
@@ -229,7 +229,7 @@ app.post('/api/fetch-lyrics', async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.1 }, // ⭐️ AI의 창의성(망상)을 억제하여 사실(가사)만 집중하게 만듦
+                generationConfig: { temperature: 0.1 }, // AI의 창의성을 최소화하여 팩트 기반 출력
                 safetySettings: safetySettings 
             })
         });
@@ -243,7 +243,7 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         
         let lyrics = data.candidates[0].content.parts[0].text;
         
-        // 프론트로 보내기 전에 파이프 기호('|') 싹 지우기 (유저 눈에는 깔끔하게 보임)
+        // 프론트로 보내기 전 파이프 기호 지우기
         lyrics = lyrics.replace(/\|/g, '').replace(/```/g, '').trim();
         
         res.json({ lyrics });
