@@ -105,7 +105,13 @@ app.post('/api/summarize', async (req, res) => {
         const data = await response.json();
         if (!data.candidates) throw new Error('AI 검열 차단됨');
         
-        const aiText = data.candidates[0].content.parts[0].text;
+        let aiText = data.candidates[0].content.parts[0].text;
+        
+        // 마크다운 제거 로직 추가
+        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) aiText = jsonMatch[0];
+
         res.json(JSON.parse(aiText));
     } catch (error) {
         res.status(500).json({ error: 'AI 요약 에러' });
@@ -137,7 +143,13 @@ app.post('/api/translate', async (req, res) => {
         });
 
         const data = await response.json();
-        const aiText = data.candidates[0].content.parts[0].text;
+        let aiText = data.candidates[0].content.parts[0].text;
+
+        // 마크다운 제거 로직 추가
+        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) aiText = jsonMatch[0];
+
         res.json(JSON.parse(aiText));
     } catch (error) {
         res.status(500).json({ error: '단어장 번역 에러' });
@@ -232,7 +244,13 @@ app.post('/api/daily-theme', async (req, res) => {
             return res.status(500).json({ error: 'AI가 문장을 생성하지 못했습니다.' });
         }
 
-        const aiText = data.candidates[0].content.parts[0].text;
+        let aiText = data.candidates[0].content.parts[0].text;
+        
+        // 마크다운 제거 로직 추가
+        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) aiText = jsonMatch[0];
+
         const parsedData = JSON.parse(aiText);
 
         res.json(parsedData);
