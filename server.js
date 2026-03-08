@@ -202,77 +202,132 @@ app.post('/api/search-youtube', async (req, res) => {
     }
 });
 
-// ⭐️ 업데이트: VEVO 제거 및 신분증(User-Agent) 탑재로 가사 DB 철통 접속!
+// ⭐️ 가사 검색: LRCLIB DB → MusicMatch → Gemini AI 3단계 폴백
 app.post('/api/fetch-lyrics', async (req, res) => {
     try {
         const { videoTitle, channelTitle } = req.body;
         
-        // 1. VEVO, Official, 괄호 등 검색을 방해하는 찌꺼기 완벽 제거
-        let cleanTitle = videoTitle.replace(/\[.*?\]|\(.*?\)|\|.*/g, '').trim();
-        let cleanChannel = channelTitle.replace(/VEVO|Official|Topic/ig, '').trim();
-        
-        // 유튜브 제목에 이미 가수명이 포함되어 있으면 제목만으로 검색, 아니면 가수+제목 조합
-        let searchQuery = cleanTitle;
-        if (!cleanTitle.toLowerCase().includes(cleanChannel.toLowerCase())) {
-            searchQuery = `${cleanChannel} ${cleanTitle}`;
-        }
-        console.log("LRCLIB 가사 DB 검색어:", searchQuery);
+        // 유튜브 제목에서 [MV], (Official Audio) 등 불필요한 기호 제거
+        const cleanTitle = videoTitle.replace(/\[.*?\]|\(.*?\)/g, '').replace(/official|audio|video|lyrics|mv|hd|4k/gi, '').trim();
+        const artistName = channelTitle.replace(/official|channel|VEVO|music/gi, '').trim();
 
-        // 2. 신분증(User-Agent)을 들고 글로벌 가사 DB(LRCLIB) 접속
-        const lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`;
-        const lrclibRes = await fetch(lrclibUrl, {
-            headers: { 'User-Agent': 'ChalkakSpeakingApp/1.0 (https://github.com/creki01/chalkak-speaking)' }
-        });
-        
-        if (lrclibRes.ok) {
-            const lrclibData = await lrclibRes.json();
-            if (lrclibData && lrclibData.length > 0) {
-                const bestMatch = lrclibData.find(song => song.plainLyrics) || lrclibData[0];
-                if (bestMatch && bestMatch.plainLyrics) {
-                    console.log("✅ 가사 DB 검색 성공!");
-                    return res.json({ lyrics: bestMatch.plainLyrics });
+        console.log(`🎵 가사 검색 시작: "${cleanTitle}" by "${artistName}"`);
+
+        // ── STEP 1: LRCLIB (무료 글로벌 가사 DB) ──────────────────────────
+        try {
+            const queries = [
+                `${artistName} ${cleanTitle}`,
+                cleanTitle,
+                `${channelTitle} ${cleanTitle}`
+            ];
+
+            for (const q of queries) {
+                const lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(q)}`;
+                console.log(`  LRCLIB 시도: ${lrclibUrl}`);
+                
+                const lrclibRes = await fetch(lrclibUrl, {
+                    headers: { 'User-Agent': 'SeanSpeakingApp/1.0' },
+                    signal: AbortSignal.timeout(8000)
+                });
+                
+                if (lrclibRes.ok) {
+                    const lrclibData = await lrclibRes.json();
+                    if (lrclibData && lrclibData.length > 0) {
+                        const bestMatch = lrclibData.find(song => song.plainLyrics);
+                        if (bestMatch?.plainLyrics) {
+                            console.log(`✅ LRCLIB 성공! 곡명: ${bestMatch.trackName}`);
+                            return res.json({ lyrics: bestMatch.plainLyrics, source: 'lrclib' });
+                        }
+                    }
+                } else {
+                    console.log(`  LRCLIB HTTP ${lrclibRes.status}`);
                 }
             }
+        } catch (lrclibErr) {
+            console.log(`⚠️ LRCLIB 연결 실패: ${lrclibErr.message}`);
         }
 
-        // 3. DB에 도저히 없을 때만 AI를 호출 (저작권 우회 파이프 & 망상 통제 탑재)
-        console.log("⚠️ DB에 가사가 없습니다. AI 호출을 시도합니다.");
-        const geminiApiKey = process.env.GEMINI_API_KEY;
-        if (!geminiApiKey) return res.status(500).json({ error: 'Gemini API 키 누락' });
+        // ── STEP 2: Lyrics.ovh (가사 API, 무료) ───────────────────────────
+        try {
+            const ovhUrl = `https://api.lyrics.ovh/v1/${encodeURIComponent(artistName)}/${encodeURIComponent(cleanTitle)}`;
+            console.log(`  Lyrics.ovh 시도: ${ovhUrl}`);
+            
+            const ovhRes = await fetch(ovhUrl, {
+                signal: AbortSignal.timeout(8000)
+            });
+            
+            if (ovhRes.ok) {
+                const ovhData = await ovhRes.json();
+                if (ovhData.lyrics && ovhData.lyrics.trim().length > 20) {
+                    console.log('✅ Lyrics.ovh 성공!');
+                    return res.json({ lyrics: ovhData.lyrics.trim(), source: 'lyrics.ovh' });
+                }
+            } else {
+                console.log(`  Lyrics.ovh HTTP ${ovhRes.status}`);
+            }
+        } catch (ovhErr) {
+            console.log(`⚠️ Lyrics.ovh 연결 실패: ${ovhErr.message}`);
+        }
 
-        const prompt = `당신은 음악 가사를 찾는 AI입니다. 
-        노래: "${cleanTitle}" (가수: "${cleanChannel}")
-        이 노래의 '원어 가사'를 작성하세요.
-        [규칙]
-        1. 가사 끝에 무조건 '|' 기호를 붙이세요.
-        2. 다른 설명이나 파트 기호 없이 오직 순수 가사만 적으세요.`;
+        // ── STEP 3: Gemini AI 폴백 ────────────────────────────────────────
+        console.log("🤖 외부 DB에서 가사를 찾지 못해 Gemini AI를 호출합니다.");
+        const geminiApiKey = process.env.GEMINI_API_KEY;
+        if (!geminiApiKey) return res.status(500).json({ error: 'Gemini API 키가 설정되지 않았습니다.' });
+
+        // 곡이 영어인지 한국어인지 판단
+        const isKorean = /[가-힣]/.test(cleanTitle) || /[가-힣]/.test(artistName);
+        const langHint = isKorean ? '한국어' : '원어(영어/일본어 등)';
+
+        const prompt = `음악 정보 전문가로서 다음 곡의 가사를 알려주세요.
+곡 제목: "${cleanTitle}"
+아티스트: "${artistName}"
+
+아래 규칙을 반드시 따르세요:
+1. ${langHint} 가사 원문만 출력하세요.
+2. [Verse], [Chorus] 같은 파트 태그, 줄번호, 설명 문구를 절대 포함하지 마세요.
+3. 가사를 모른다면 "UNKNOWN"이라고만 출력하세요.
+4. 1절부터 마지막 절까지 완전한 가사를 출력하세요.`;
 
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
-        const response = await fetch(geminiEndpoint, {
+        const geminiRes = await fetch(geminiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.1 },
+                generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
                 safetySettings: safetySettings 
-            })
+            }),
+            signal: AbortSignal.timeout(30000)
         });
         
-        const data = await response.json();
+        const geminiData = await geminiRes.json();
         
-        // AI마저 저작권 필터에 걸려버렸을 때의 친절한 안내 메시지
-        if (!data.candidates || !data.candidates[0].content || data.candidates[0].finishReason === 'RECITATION') {
-            return res.json({ lyrics: "🚨 이 노래는 저작권 보호가 강력하여 가사를 가져올 수 없습니다. 커버곡(Cover)이나 라이브(Live) 영상을 선택해 보세요!" });
+        if (!geminiRes.ok) {
+            console.error('Gemini API 오류:', JSON.stringify(geminiData));
+            return res.status(500).json({ error: `Gemini API 오류: ${geminiData.error?.message || geminiRes.status}` });
+        }
+
+        if (!geminiData.candidates || !geminiData.candidates[0]?.content) {
+            const blockReason = geminiData.promptFeedback?.blockReason || '알 수 없음';
+            console.error('Gemini 응답 차단:', blockReason);
+            return res.status(500).json({ error: `AI가 이 곡의 가사 제공을 거부했습니다. (사유: ${blockReason})` });
         }
         
-        let lyrics = data.candidates[0].content.parts[0].text;
-        lyrics = lyrics.replace(/\|/g, '').replace(/```/g, '').trim();
+        let lyrics = geminiData.candidates[0].content.parts[0].text.trim();
         
-        res.json({ lyrics });
+        if (lyrics === 'UNKNOWN' || lyrics.length < 20) {
+            return res.status(404).json({ error: `"${cleanTitle}" 가사를 찾을 수 없습니다. 정확한 곡명과 아티스트명으로 다시 검색해 보세요.` });
+        }
+
+        // 불필요한 마크다운 및 파트 태그 제거
+        lyrics = lyrics.replace(/```[^`]*```/g, '').replace(/\[.*?\]/g, '').replace(/^\s*[\r\n]/gm, '\n').trim();
+        
+        console.log('✅ Gemini 가사 생성 성공');
+        res.json({ lyrics, source: 'gemini' });
 
     } catch (error) {
-        console.error("Lyrics Fetch Error:", error);
-        res.status(500).json({ error: '가사를 찾을 수 없거나 추출 중 에러가 발생했습니다.' });
+        console.error("Lyrics Fetch 최종 오류:", error);
+        res.status(500).json({ error: `가사 검색 실패: ${error.message}` });
     }
 });
 
