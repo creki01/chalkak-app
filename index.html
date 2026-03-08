@@ -237,13 +237,13 @@
                 });
                 const data = await res.json();
                 
-                if (!res.ok) throw new Error(data.error);
+                if (!res.ok) throw new Error(data.error || '알 수 없는 서버 오류 발생');
 
                 localStorage.setItem(cacheKey, JSON.stringify({ date: today, data: data }));
                 renderDailyThemeList(data);
             } catch (error) {
                 titleEl.innerText = '테마를 불러오지 못했습니다 😢';
-                descEl.innerText = '다시 시도해주세요.';
+                descEl.innerText = `오류 원인: ${error.message}`;
             }
         }
 
