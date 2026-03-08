@@ -133,14 +133,25 @@
 
         <div id="dailyView" style="display: none; text-align: left;">
             <div class="daily-header">
-                <h2 class="daily-title" id="dailyThemeTitle">⏳ 테마 준비 중...</h2>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <select id="langSelect" onchange="loadDailyTheme(true)" style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #ccc; font-weight: bold; background: #fff; outline: none; cursor: pointer;">
+                        <option value="영어">🇺🇸 영어</option>
+                        <option value="일본어">🇯🇵 일본어</option>
+                    </select>
+                    <select id="levelSelect" onchange="loadDailyTheme(true)" style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #ccc; font-weight: bold; background: #fff; color: #007aff; outline: none; cursor: pointer;">
+                        <option value="초급">🌱 초급</option>
+                        <option value="중급">🌿 중급</option>
+                        <option value="고급">🌳 고급</option>
+                    </select>
+                </div>
+                <h2 class="daily-title" id="dailyThemeTitle" style="margin: 0;">⏳ 테마 준비 중...</h2>
                 <p id="dailyThemeDesc" style="color: #666; font-size: 14px; margin: 5px 0 0 0;"></p>
             </div>
             
             <p style="color:#666; font-size:14px; text-align:center;">(문장을 터치하면 무한반복 재생됩니다)</p>
             <div id="dailySentences"></div>
             
-            <button class="btn btn-orange" style="margin-top: 20px;" onclick="loadDailyTheme(true)">🔄 다른 주제로 추천받기</button>
+            <button class="btn btn-orange" style="margin-top: 20px;" onclick="loadDailyTheme(true)">🔄 같은 조건의 다른 주제 추천받기</button>
             <button class="btn" style="background-color: #8e8e93;" onclick="stopSpeech()">⏹️ 발음 정지</button>
         </div>
 
@@ -187,7 +198,7 @@
             } else if (tab === 'daily') {
                 document.getElementById('tabDaily').classList.add('active');
                 document.getElementById('dailyView').style.display = 'block';
-                loadDailyTheme(); // 테마 로드 (캐시 확인)
+                loadDailyTheme(); 
             } else {
                 document.getElementById('tabWordbook').classList.add('active');
                 document.getElementById('wordbookView').style.display = 'block';
@@ -195,17 +206,17 @@
             }
         }
 
-        // --- ⭐ 오늘의 회화 로직 시작 ---
         async function loadDailyTheme(forceRefresh = false) {
             const titleEl = document.getElementById('dailyThemeTitle');
             const descEl = document.getElementById('dailyThemeDesc');
             const listEl = document.getElementById('dailySentences');
+            const level = document.getElementById('levelSelect').value;
+            const lang = document.getElementById('langSelect').value;
 
-            // 오늘 날짜 구하기 (YYYY-MM-DD)
             const today = new Date().toISOString().split('T')[0];
-            let cached = localStorage.getItem('chalkakDailyTheme');
+            const cacheKey = `chalkakDailyTheme_${lang}_${level}`; 
+            let cached = localStorage.getItem(cacheKey);
             
-            // 캐시가 있고, 오늘 날짜이며, 강제 새로고침이 아닐 경우 캐시 데이터 사용
             if (cached && !forceRefresh) {
                 let parsed = JSON.parse(cached);
                 if (parsed.date === today) {
@@ -214,18 +225,21 @@
                 }
             }
 
-            titleEl.innerText = '⏳ AI 선생님이 오늘의 테마를 짓고 있어요...';
+            titleEl.innerText = `⏳ AI 선생님이 ${lang} ${level} 테마를 짓고 있어요...`;
             descEl.innerText = '';
             listEl.innerHTML = '';
 
             try {
-                const res = await fetch('/api/daily-theme', { method: 'POST' });
+                const res = await fetch('/api/daily-theme', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language: lang, level: level }) 
+                });
                 const data = await res.json();
                 
                 if (!res.ok) throw new Error(data.error);
 
-                // 결과 로컬 스토리지에 저장 (캐싱)
-                localStorage.setItem('chalkakDailyTheme', JSON.stringify({ date: today, data: data }));
+                localStorage.setItem(cacheKey, JSON.stringify({ date: today, data: data }));
                 renderDailyThemeList(data);
             } catch (error) {
                 titleEl.innerText = '테마를 불러오지 못했습니다 😢';
@@ -240,6 +254,9 @@
             const listEl = document.getElementById('dailySentences');
             listEl.innerHTML = '';
 
+            const currentLang = document.getElementById('langSelect').value;
+            const ttsLang = currentLang === '일본어' ? 'ja-JP' : 'en-US';
+
             data.sentences.forEach((item) => {
                 const div = document.createElement('div');
                 div.className = 'word-item';
@@ -249,16 +266,14 @@
                                  : '';
 
                 div.innerHTML = `
-                    <div class="word-text sentence" data-lang="en-US">${item.text}</div>
+                    <div class="word-text sentence" data-lang="${ttsLang}">${item.text}</div>
                     <div class="word-trans">${item.translation}</div>
                     ${pronHtml}
                 `;
 
-                // 문장 클릭 시 발음 재생
                 const textSpan = div.querySelector('.word-text');
                 textSpan.onclick = function() { toggleLoop(item.text, this); };
 
-                // 단어장 저장(별) 버튼 추가
                 const starBtn = document.createElement('button');
                 starBtn.className = 'star-btn';
                 starBtn.style.position = 'absolute';
@@ -287,16 +302,10 @@
                 return;
             }
 
-            // 번역과 발음이 이미 있으므로 API 호출 없이 바로 단어장에 추가
-            myWordbook.unshift({
-                text: item.text,
-                translation: item.translation,
-                pronunciation: item.pronunciation
-            });
+            myWordbook.unshift({ text: item.text, translation: item.translation, pronunciation: item.pronunciation });
             localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
             btnElement.classList.add('saved');
         }
-        // --- ⭐ 오늘의 회화 로직 끝 ---
 
         function getLang(text) {
             if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
@@ -306,23 +315,19 @@
 
         function resetLanguageButtons() {
             document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            if(document.querySelector('.lang-btn')) {
-                document.querySelector('.lang-btn').classList.add('active'); 
-            }
+            if(document.querySelector('.lang-btn')) { document.querySelector('.lang-btn').classList.add('active'); }
         }
 
         imageInput.addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
-            stopSpeech();
-            resetLanguageButtons();
+            stopSpeech(); resetLanguageButtons();
             document.getElementById('youtubePlayerContainer').style.display = 'none';
             searchResultsContainer.style.display = 'none';
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                preview.src = e.target.result;
-                preview.style.display = 'block';
+                preview.src = e.target.result; preview.style.display = 'block';
                 const base64Image = e.target.result.split(',')[1]; 
                 sendToVisionAPI(base64Image);
             };
@@ -332,11 +337,9 @@
         audioInput.addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
-            stopSpeech();
-            preview.style.display = 'none';
+            stopSpeech(); preview.style.display = 'none';
             document.getElementById('youtubePlayerContainer').style.display = 'none';
-            searchResultsContainer.style.display = 'none';
-            resetLanguageButtons();
+            searchResultsContainer.style.display = 'none'; resetLanguageButtons();
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -351,394 +354,219 @@
             const query = document.getElementById('musicSearchInput').value;
             if (!query.trim()) return alert("검색어를 입력해주세요!");
 
-            stopSpeech();
-            resetLanguageButtons();
-            preview.style.display = 'none'; 
+            stopSpeech(); resetLanguageButtons(); preview.style.display = 'none'; 
             document.getElementById('youtubePlayerContainer').style.display = 'none';
-            resultContainer.style.display = 'none';
-            searchResultsContainer.style.display = 'none';
-            
-            loading.innerText = '🎵 유튜브에서 관련된 영상을 찾고 있습니다...';
-            loading.style.display = 'block';
+            resultContainer.style.display = 'none'; searchResultsContainer.style.display = 'none';
+            loading.innerText = '🎵 유튜브에서 관련된 영상을 찾고 있습니다...'; loading.style.display = 'block';
 
             try {
                 const response = await fetch('/api/search-youtube', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: query })
                 });
                 const data = await response.json();
-                
                 if (!response.ok) throw new Error(data.error || '목록 검색 실패');
 
                 searchResultsContainer.innerHTML = '<h3 style="margin-top:0; color:#555; font-size:15px;">👇 원하는 영상을 선택하세요</h3>';
                 data.results.forEach(video => {
                     const safeTitle = video.title.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     const safeChannel = video.channelTitle.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    
                     const item = document.createElement('div');
                     item.className = 'video-item';
-                    item.innerHTML = `
-                        <img src="${video.thumbnail}" class="video-thumb" alt="썸네일">
-                        <div class="video-info">
-                            <p class="video-title">${video.title}</p>
-                            <p class="video-channel">${video.channelTitle}</p>
-                        </div>
-                    `;
+                    item.innerHTML = `<img src="${video.thumbnail}" class="video-thumb" alt="썸네일"><div class="video-info"><p class="video-title">${video.title}</p><p class="video-channel">${video.channelTitle}</p></div>`;
                     item.onclick = () => selectVideo(video.videoId, safeTitle, safeChannel);
                     searchResultsContainer.appendChild(item);
                 });
-
-                loading.style.display = 'none';
-                searchResultsContainer.style.display = 'block';
-
-            } catch (error) {
-                loading.innerText = '오류: ' + error.message;
-            }
+                loading.style.display = 'none'; searchResultsContainer.style.display = 'block';
+            } catch (error) { loading.innerText = '오류: ' + error.message; }
         }
 
         async function selectVideo(videoId, videoTitle, channelTitle) {
             searchResultsContainer.style.display = 'none'; 
-            
             const ytContainer = document.getElementById('youtubePlayerContainer');
             const ytPlayer = document.getElementById('youtubePlayer');
             ytPlayer.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
             ytContainer.style.display = 'block';
 
-            loading.innerText = '⏳ 영상을 재생하며 1절부터 가사를 추출 중입니다...';
-            startLoading();
+            loading.innerText = '⏳ 영상을 재생하며 1절부터 가사를 추출 중입니다...'; startLoading();
 
             try {
                 const response = await fetch('/api/fetch-lyrics', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ videoTitle: videoTitle, channelTitle: channelTitle }) 
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoTitle: videoTitle, channelTitle: channelTitle }) 
                 });
                 const data = await response.json();
-                
                 if (!response.ok) throw new Error(data.error || '가사 추출 실패');
-
                 handleExtractedText(data.lyrics);
-
-            } catch (error) {
-                resultText.innerText = '오류: ' + error.message;
-                finishLoading();
-            }
+            } catch (error) { resultText.innerText = '오류: ' + error.message; finishLoading(); }
         }
 
         async function sendToVisionAPI(base64Image) {
-            loading.innerText = '⏳ 사진에서 글자를 읽고 있습니다...';
-            startLoading();
+            loading.innerText = '⏳ 사진에서 글자를 읽고 있습니다...'; startLoading();
             try {
                 const response = await fetch('/api/vision', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: base64Image })
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error);
-
                 const text = data.responses[0]?.fullTextAnnotation?.text;
                 handleExtractedText(text);
-            } catch (error) {
-                resultText.innerText = '오류: ' + error.message;
-                finishLoading();
-            }
+            } catch (error) { resultText.innerText = '오류: ' + error.message; finishLoading(); }
         }
 
         async function sendToTranscribeAPI(base64Audio, mimeType) {
-            loading.innerText = '⏳ 음성 파일을 듣고 글자로 받아쓰고 있습니다...\n(길이에 따라 10~20초 소요될 수 있습니다)';
-            startLoading();
+            loading.innerText = '⏳ 음성 파일을 듣고 글자로 받아쓰고 있습니다...'; startLoading();
             try {
                 const response = await fetch('/api/transcribe', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audio: base64Audio, mimeType: mimeType })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio: base64Audio, mimeType: mimeType })
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || '음성 추출 에러가 발생했습니다.');
-
                 handleExtractedText(data.text);
-            } catch (error) {
-                resultText.innerText = '오류: ' + error.message;
-                finishLoading();
-            }
+            } catch (error) { resultText.innerText = '오류: ' + error.message; finishLoading(); }
         }
 
         function handleExtractedText(text) {
             if (text && text.trim() !== "") {
-                originalExtractedText = text; 
-                document.getElementById('translateControl').style.display = 'flex';
-                
-                renderSentences(text, resultText, "auto");
-                generateSummary(text);
-            } else {
-                resultText.innerText = '글자를 찾지 못했어요.';
-                finishLoading();
-            }
+                originalExtractedText = text; document.getElementById('translateControl').style.display = 'flex';
+                renderSentences(text, resultText, "auto"); generateSummary(text);
+            } else { resultText.innerText = '글자를 찾지 못했어요.'; finishLoading(); }
         }
 
         function renderSentences(text, container, langType = "auto") {
             container.innerHTML = '';
             sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [text];
-            sentences.forEach((sentence, index) => {
-                createSentenceUI(sentence, index, container, sentence, langType);
-            });
+            sentences.forEach((sentence, index) => { createSentenceUI(sentence, index, container, sentence, langType); });
         }
 
         function startLoading() {
-            loading.style.display = 'block';
-            resultContainer.style.display = 'none';
-            summaryContainer.style.display = 'none';
-            document.getElementById('translateControl').style.display = 'none';
-            resultText.innerHTML = '';
-            sentences = [];
+            loading.style.display = 'block'; resultContainer.style.display = 'none'; summaryContainer.style.display = 'none';
+            document.getElementById('translateControl').style.display = 'none'; resultText.innerHTML = ''; sentences = [];
         }
 
-        function finishLoading() {
-            loading.style.display = 'none';
-            resultContainer.style.display = 'block';
-        }
+        function finishLoading() { loading.style.display = 'none'; resultContainer.style.display = 'block'; }
 
         function selectLanguage(btnElement, targetLangCode, langName) {
-            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            btnElement.classList.add('active');
-
-            if (targetLangCode === 'original') {
-                restoreOriginalText();
-            } else {
-                translateMainText(targetLangCode, langName);
-            }
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active')); btnElement.classList.add('active');
+            if (targetLangCode === 'original') restoreOriginalText(); else translateMainText(targetLangCode, langName);
         }
 
         async function translateMainText(targetLangCode, cleanLangName) {
             if (!originalExtractedText) return;
-            stopSpeech();
-            
-            loading.innerText = `⏳ 본문을 ${cleanLangName}로 변환 중입니다...`;
-            loading.style.display = 'block';
-            resultText.innerHTML = '';
-
+            stopSpeech(); loading.innerText = `⏳ 본문을 ${cleanLangName}로 변환 중입니다...`; loading.style.display = 'block'; resultText.innerHTML = '';
             try {
                 const response = await fetch('/api/translate-all', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: originalExtractedText, targetLang: cleanLangName })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: originalExtractedText, targetLang: cleanLangName })
                 });
                 const data = await response.json();
-                
                 if (!response.ok) throw new Error(data.error || '번역 실패');
-                
                 renderSentences(data.text, resultText, targetLangCode);
-            } catch (error) {
-                resultText.innerText = "번역에 실패했습니다: " + error.message;
-            } finally {
-                loading.style.display = 'none';
-            }
+            } catch (error) { resultText.innerText = "번역에 실패했습니다: " + error.message; } finally { loading.style.display = 'none'; }
         }
 
-        function restoreOriginalText() {
-            stopSpeech();
-            renderSentences(originalExtractedText, resultText, "auto");
-        }
+        function restoreOriginalText() { stopSpeech(); renderSentences(originalExtractedText, resultText, "auto"); }
 
         function createSentenceUI(displayText, id, container, speakText = null, lang = "auto") {
-            const actualSpeakText = speakText || displayText.split('\n')[0]; 
-            const cleanText = actualSpeakText.trim();
-
-            const box = document.createElement('div');
-            box.className = 'sentence-box';
-
-            const span = document.createElement('span');
-            span.className = 'sentence';
-            span.id = `sentence-${id}`;
-            span.innerText = displayText.trim() + ' ';
-            span.dataset.lang = lang; 
+            const actualSpeakText = speakText || displayText.split('\n')[0]; const cleanText = actualSpeakText.trim();
+            const box = document.createElement('div'); box.className = 'sentence-box';
+            const span = document.createElement('span'); span.className = 'sentence'; span.id = `sentence-${id}`;
+            span.innerText = displayText.trim() + ' '; span.dataset.lang = lang; 
             span.onclick = function() { toggleLoop(cleanText, this); };
-
-            const starBtn = document.createElement('button');
-            starBtn.className = 'star-btn';
-            starBtn.innerText = '⭐️';
-            if (myWordbook.some(item => item.text === cleanText)) {
-                starBtn.classList.add('saved');
-            }
+            const starBtn = document.createElement('button'); starBtn.className = 'star-btn'; starBtn.innerText = '⭐️';
+            if (myWordbook.some(item => item.text === cleanText)) starBtn.classList.add('saved');
             starBtn.onclick = function() { toggleStar(cleanText, this, box); };
-
-            box.appendChild(span);
-            box.appendChild(starBtn);
-            container.appendChild(box);
+            box.appendChild(span); box.appendChild(starBtn); container.appendChild(box);
         }
 
         async function generateSummary(text) {
-            summaryContainer.style.display = 'block';
-            summaryContent.innerHTML = '⏳ AI가 요약본을 짓고 있습니다...';
+            summaryContainer.style.display = 'block'; summaryContent.innerHTML = '⏳ AI가 요약본을 짓고 있습니다...';
             try {
                 const response = await fetch('/api/summarize', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text })
                 });
-                const data = await response.json();
-                summaryContent.innerHTML = '';
-                
+                const data = await response.json(); summaryContent.innerHTML = '';
                 ['beginner', 'intermediate', 'advanced'].forEach(level => {
                     if (data[level]) {
-                        const summaryData = data[level];
-                        const transText = summaryData.translation || '번역을 불러오지 못했습니다.';
+                        const summaryData = data[level]; const transText = summaryData.translation || '번역을 불러오지 못했습니다.';
                         let displayText = `${summaryData.text}\n${transText}`;
-                        
-                        if (summaryData.pronunciation && summaryData.pronunciation.trim() !== '') {
-                            displayText += `\n[${summaryData.pronunciation}]`;
-                        }
-                        
+                        if (summaryData.pronunciation && summaryData.pronunciation.trim() !== '') displayText += `\n[${summaryData.pronunciation}]`;
                         createSentenceUI(displayText, level, summaryContent, summaryData.text, "auto"); 
                     }
                 });
                 finishLoading();
-            } catch (error) {
-                summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다.`;
-                finishLoading();
-            }
+            } catch (error) { summaryContent.innerHTML = `🚨 에러 발생: 요약본을 가져오지 못했습니다.`; finishLoading(); }
         }
 
         async function toggleStar(text, btnElement, boxElement) {
             const isSaved = myWordbook.some(item => item.text === text);
-            
             if (isSaved) {
-                myWordbook = myWordbook.filter(item => item.text !== text);
-                localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
-                btnElement.classList.remove('saved');
-                return;
+                myWordbook = myWordbook.filter(item => item.text !== text); localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
+                btnElement.classList.remove('saved'); return;
             }
-
             btnElement.innerText = '⏳'; 
             try {
                 const res = await fetch('/api/translate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text })
                 });
                 const data = await res.json();
-                
-                const finalTranslation = data.translation || '번역을 불러오지 못했습니다.';
-                const finalPronunciation = data.pronunciation || '';
-
-                myWordbook.unshift({
-                    text: text,
-                    translation: finalTranslation,
-                    pronunciation: finalPronunciation
-                });
+                const finalTranslation = data.translation || '번역을 불러오지 못했습니다.'; const finalPronunciation = data.pronunciation || '';
+                myWordbook.unshift({ text: text, translation: finalTranslation, pronunciation: finalPronunciation });
                 localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
-                
-                btnElement.innerText = '⭐️';
-                btnElement.classList.add('saved');
-            } catch (error) {
-                btnElement.innerText = '⭐️';
-                alert("저장에 실패했습니다. 다시 시도해주세요.");
-            }
+                btnElement.innerText = '⭐️'; btnElement.classList.add('saved');
+            } catch (error) { btnElement.innerText = '⭐️'; alert("저장에 실패했습니다. 다시 시도해주세요."); }
         }
 
         function renderWordbook() {
             wordList.innerHTML = '';
-            if (myWordbook.length === 0) {
-                wordList.innerHTML = '<p style="color:#888;">아직 저장된 문장이 없습니다.<br>원하는 문장 옆 ⭐️를 눌러보세요!</p>';
-                return;
-            }
-
+            if (myWordbook.length === 0) { wordList.innerHTML = '<p style="color:#888;">아직 저장된 문장이 없습니다.<br>원하는 문장 옆 ⭐️를 눌러보세요!</p>'; return; }
             myWordbook.forEach((item, index) => {
-                const div = document.createElement('div');
-                div.className = 'word-item';
-                
-                const pronHtml = (item.pronunciation && item.pronunciation.trim() !== '') 
-                                 ? `<div class="word-pron">[${item.pronunciation}]</div>` 
-                                 : '';
-
-                div.innerHTML = `
-                    <div class="word-text sentence" id="word-${index}" data-lang="auto">${item.text}</div>
-                    <div class="word-trans">${item.translation}</div>
-                    ${pronHtml}
-                    <button class="delete-btn" onclick="deleteFromWordbook(${index})">✖</button>
-                `;
-                
-                const textSpan = div.querySelector('.word-text');
-                textSpan.onclick = function() { toggleLoop(item.text, this); };
-
+                const div = document.createElement('div'); div.className = 'word-item';
+                const pronHtml = (item.pronunciation && item.pronunciation.trim() !== '') ? `<div class="word-pron">[${item.pronunciation}]</div>` : '';
+                div.innerHTML = `<div class="word-text sentence" id="word-${index}" data-lang="auto">${item.text}</div><div class="word-trans">${item.translation}</div>${pronHtml}<button class="delete-btn" onclick="deleteFromWordbook(${index})">✖</button>`;
+                const textSpan = div.querySelector('.word-text'); textSpan.onclick = function() { toggleLoop(item.text, this); };
                 wordList.appendChild(div);
             });
         }
 
         function deleteFromWordbook(index) {
             if(confirm("이 문장을 단어장에서 삭제할까요?")) {
-                myWordbook.splice(index, 1); 
-                localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook));
-                renderWordbook(); 
+                myWordbook.splice(index, 1); localStorage.setItem('chalkakWordbook', JSON.stringify(myWordbook)); renderWordbook(); 
             }
         }
 
         function toggleLoop(text, element) {
             if (isLooping && currentLoopTarget === element) { stopSpeech(); return; }
-            stopSpeech();
-            isLooping = true;
-            currentLoopTarget = element;
-            element.classList.add('highlight');
-            speakLoop(text, element);
+            stopSpeech(); isLooping = true; currentLoopTarget = element; element.classList.add('highlight'); speakLoop(text, element);
         }
 
         function speakLoop(text, element) {
             if (!isLooping || currentLoopTarget !== element) return;
             const utterance = new SpeechSynthesisUtterance(text);
-            
-            const langAttr = element.dataset.lang || 'auto';
-            utterance.lang = langAttr === 'auto' ? getLang(text) : langAttr;
+            const langAttr = element.dataset.lang || 'auto'; utterance.lang = langAttr === 'auto' ? getLang(text) : langAttr;
             utterance.rate = parseFloat(speedSelect.value);
-            
-            utterance.onend = function() {
-                if (isLooping && currentLoopTarget === element) {
-                    setTimeout(() => speakLoop(text, element), 500);
-                }
-            };
+            utterance.onend = function() { if (isLooping && currentLoopTarget === element) setTimeout(() => speakLoop(text, element), 500); };
             window.speechSynthesis.speak(utterance);
         }
 
         function playAllSpeech() {
-            stopSpeech();
-            if (sentences.length === 0) return;
-            sequentialIndex = 0;
-            speakSequential();
+            stopSpeech(); if (sentences.length === 0) return; sequentialIndex = 0; speakSequential();
         }
 
         function speakSequential() {
             if (sequentialIndex >= sentences.length || sequentialIndex < 0) { clearHighlights(); return; }
-            clearHighlights();
-            const targetSpan = document.getElementById('sentence-' + sequentialIndex);
-            if (targetSpan) {
-                targetSpan.classList.add('highlight');
-                targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-            const textToSpeak = sentences[sequentialIndex];
-            const utterance = new SpeechSynthesisUtterance(textToSpeak);
-            
-            const langAttr = targetSpan ? targetSpan.dataset.lang : 'auto';
-            utterance.lang = langAttr === 'auto' ? getLang(textToSpeak) : langAttr;
+            clearHighlights(); const targetSpan = document.getElementById('sentence-' + sequentialIndex);
+            if (targetSpan) { targetSpan.classList.add('highlight'); targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+            const textToSpeak = sentences[sequentialIndex]; const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            const langAttr = targetSpan ? targetSpan.dataset.lang : 'auto'; utterance.lang = langAttr === 'auto' ? getLang(textToSpeak) : langAttr;
             utterance.rate = parseFloat(speedSelect.value); 
-            
-            utterance.onend = function() {
-                if (sequentialIndex >= 0) { sequentialIndex++; speakSequential(); }
-            };
+            utterance.onend = function() { if (sequentialIndex >= 0) { sequentialIndex++; speakSequential(); } };
             window.speechSynthesis.speak(utterance);
         }
 
         function stopSpeech() {
             isLooping = false; currentLoopTarget = null; sequentialIndex = -1;
-            if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-                clearHighlights();
-            }
+            if (window.speechSynthesis) { window.speechSynthesis.cancel(); clearHighlights(); }
         }
 
-        function clearHighlights() {
-            document.querySelectorAll('.sentence').forEach(span => span.classList.remove('highlight'));
-        }
+        function clearHighlights() { document.querySelectorAll('.sentence').forEach(span => span.classList.remove('highlight')); }
     </script>
 </body>
 </html>
