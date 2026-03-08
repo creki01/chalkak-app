@@ -174,7 +174,6 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// 1단계 - 유튜브 검색 목록 5개 가져오기
 app.post('/api/search-youtube', async (req, res) => {
     try {
         const { query } = req.body;
@@ -203,21 +202,26 @@ app.post('/api/search-youtube', async (req, res) => {
     }
 });
 
-// 2단계 - 사용자가 선택한 영상 제목으로 가사만 추출하기
+// ⭐️ 업데이트: 채널명(가수)을 함께 받아 AI에게 명령
 app.post('/api/fetch-lyrics', async (req, res) => {
     try {
-        const { videoTitle } = req.body;
+        const { videoTitle, channelTitle } = req.body;
         const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) return res.status(500).json({ error: 'Gemini API 키 누락' });
 
-        const prompt = `다음은 유튜브 검색 결과로 나온 영상의 제목입니다: "${videoTitle}"
-        이 제목에서 불필요한 수식어(MV, Official, Audio, Live, Lyrics 등)를 완벽하게 무시하고, 진짜 '가수'와 '노래 제목'만 정확히 파악하세요.
-        그리고 그 노래의 실제 '원어 가사'만 처음부터 끝까지 제공하세요.
+        const prompt = `당신은 전 세계의 모든 음악 가사를 정확하게 알고 있는 AI입니다.
+        사용자가 선택한 유튜브 영상의 정보는 다음과 같습니다:
+        - 영상 제목: "${videoTitle}"
+        - 유튜브 채널명(가수): "${channelTitle}"
+        
+        이 두 가지 정보를 조합하여 정확히 '어떤 가수의 어떤 노래'인지 완벽하게 파악하세요.
+        그리고 해당 노래의 정확한 '원어 가사'를 처음부터 끝까지 출력하세요.
         
         [엄격한 규칙]
-        1. 가사가 아닌 다른 말(인사말, 부연 설명, 제목, 가수명 확인 등)은 단 한 글자도 출력하지 마세요.
-        2. [Verse 1], [Chorus] 같은 파트 구분 기호도 절대 넣지 마세요.
-        3. 오직 부를 수 있는 순수한 가사 텍스트만 줄바꿈하여 출력하세요.`;
+        1. 가사가 아닌 다른 말(인사말, 곡 설명, 가수명, 제목 확인 등)은 단 한 글자도 출력하지 마세요.
+        2. [Verse 1], [Chorus], (Hook) 같은 파트 구분 기호나 괄호도 절대 넣지 마세요.
+        3. 반드시 노래의 **가장 첫 소절부터 마지막 소절까지 단 한 줄도 생략하지 말고** 100% 전체 가사를 제공하세요.
+        4. 오직 부를 수 있는 순수한 가사 텍스트만 줄바꿈하여 출력하세요.`;
 
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
         const geminiRes = await fetch(geminiEndpoint, {
