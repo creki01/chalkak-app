@@ -38,7 +38,6 @@ app.post('/api/vision', async (req, res) => {
         const data = await googleRes.json();
         if (!googleRes.ok) return res.status(googleRes.status).json({ error: 'Vision API 에러' });
         res.json(data);
-
     } catch (error) {
         res.status(500).json({ error: '서버 에러' });
     }
@@ -70,7 +69,6 @@ app.post('/api/transcribe', async (req, res) => {
 
         const transcribedText = data.candidates[0].content.parts[0].text;
         res.json({ text: transcribedText });
-
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -109,7 +107,6 @@ app.post('/api/summarize', async (req, res) => {
         
         const aiText = data.candidates[0].content.parts[0].text;
         res.json(JSON.parse(aiText));
-
     } catch (error) {
         res.status(500).json({ error: 'AI 요약 에러' });
     }
@@ -142,7 +139,6 @@ app.post('/api/translate', async (req, res) => {
         const data = await response.json();
         const aiText = data.candidates[0].content.parts[0].text;
         res.json(JSON.parse(aiText));
-
     } catch (error) {
         res.status(500).json({ error: '단어장 번역 에러' });
     }
@@ -173,33 +169,55 @@ app.post('/api/translate-all', async (req, res) => {
 
         const translatedText = data.candidates[0].content.parts[0].text;
         res.json({ text: translatedText });
-
     } catch (error) {
         res.status(500).json({ error: '전체 번역 에러' });
     }
 });
 
-// ⭐️ 유튜브 음악 검색 및 가사 추출 API (AI 지휘자 동기화 버전)
-app.post('/api/music', async (req, res) => {
+// ⭐️ 신규: 1단계 - 유튜브 검색 목록 5개 가져오기
+app.post('/api/search-youtube', async (req, res) => {
     try {
         const { query } = req.body;
         const ytApiKey = process.env.YOUTUBE_API_KEY; 
+        if (!ytApiKey) return res.status(500).json({ error: 'YouTube API 키 누락' });
+
+        const ytSearchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&key=${ytApiKey}&maxResults=5`;
+        const ytRes = await fetch(ytSearchUrl);
+        const ytData = await ytRes.json();
+        
+        if (!ytData.items || ytData.items.length === 0) {
+             return res.status(404).json({ error: '검색 결과가 없습니다.' });
+        }
+        
+        const results = ytData.items.map(item => ({
+            videoId: item.id.videoId,
+            title: item.snippet.title,
+            channelTitle: item.snippet.channelTitle,
+            thumbnail: item.snippet.thumbnails.medium.url
+        }));
+
+        res.json({ results });
+    } catch (error) {
+        console.error("YouTube Search Error:", error);
+        res.status(500).json({ error: '유튜브 검색 중 에러가 발생했습니다.' });
+    }
+});
+
+// ⭐️ 신규: 2단계 - 사용자가 선택한 영상 제목으로 가사만 추출하기
+app.post('/api/fetch-lyrics', async (req, res) => {
+    try {
+        const { videoTitle } = req.body;
         const geminiApiKey = process.env.GEMINI_API_KEY;
+        if (!geminiApiKey) return res.status(500).json({ error: 'Gemini API 키 누락' });
 
-        if (!ytApiKey || !geminiApiKey) return res.status(500).json({ error: 'API 키가 누락되었습니다. (.env 확인)' });
-
-        // 1. AI(제미나이)에게 먼저 곡을 확정하고 가사를 뽑으라고 지시
-        const prompt = `사용자가 "${query}"라고 음악을 검색했습니다. 
-        가장 유명하고 연관성 높은 1개의 곡을 골라, 그 곡의 '가수', '제목', 그리고 '원어 가사'를 JSON 형식으로만 반환하세요.
+        const prompt = `다음은 유튜브 검색 결과로 나온 영상의 제목입니다: "${videoTitle}"
+        이 제목에서 불필요한 수식어(MV, Official, Audio, Live, Lyrics 등)를 완벽하게 무시하고, 진짜 '가수'와 '노래 제목'만 정확히 파악하세요.
+        그리고 그 노래의 실제 '원어 가사'만 처음부터 끝까지 제공하세요.
         
         [엄격한 규칙]
-        1. 가사에는 [Verse 1], [Chorus] 같은 파트 구분 기호나 부연 설명을 절대 넣지 마세요.
-        2. 반드시 아래 JSON 형식으로만 출력하세요. 마크다운(\`\`\`) 기호도 쓰지 마세요.
-        {
-          "artist": "가수 이름",
-          "title": "노래 제목",
-          "lyrics": "가사 텍스트 (줄바꿈 포함)"
-        }`;
+        1. 가사가 아닌 다른 말(인사말, 부연 설명, 제목, 가수명 확인 등)은 단 한 글자도 출력하지 마세요.
+        2. [Verse 1], [Chorus] 같은 파트 구분 기호도 절대 넣지 마세요.
+        3. 오직 부를 수 있는 순수한 가사 텍스트만 줄바꿈하여 출력하세요.`;
 
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
         const geminiRes = await fetch(geminiEndpoint, {
@@ -212,32 +230,14 @@ app.post('/api/music', async (req, res) => {
         });
         
         const geminiData = await geminiRes.json();
-        if (!geminiData.candidates) throw new Error('AI가 곡 정보를 찾지 못했습니다.');
+        if (!geminiData.candidates) throw new Error('가사를 불러오지 못했습니다.');
         
-        // AI가 준 JSON 데이터 파싱
-        let aiText = geminiData.candidates[0].content.parts[0].text;
-        aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const songInfo = JSON.parse(aiText);
-
-        // 2. AI가 확정한 '가수 + 제목'으로 유튜브 검색
-        const exactSearchQuery = `${songInfo.artist} ${songInfo.title} official audio`;
-        const ytSearchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(exactSearchQuery)}&type=video&key=${ytApiKey}&maxResults=1`;
-        
-        const ytRes = await fetch(ytSearchUrl);
-        const ytData = await ytRes.json();
-        
-        if (!ytData.items || ytData.items.length === 0) {
-             return res.status(404).json({ error: '유튜브에서 해당 영상(음원)을 찾을 수 없습니다.' });
-        }
-        
-        const videoId = ytData.items[0].id.videoId;
-
-        // 3. 찾아낸 영상과 AI가 뽑은 가사를 프론트로 전달
-        res.json({ videoId: videoId, lyrics: songInfo.lyrics });
+        const lyrics = geminiData.candidates[0].content.parts[0].text;
+        res.json({ lyrics });
 
     } catch (error) {
-        console.error("Music API Error:", error);
-        res.status(500).json({ error: '음악 검색 중 서버 에러가 발생했습니다.' });
+        console.error("Lyrics Fetch Error:", error);
+        res.status(500).json({ error: '가사 추출 중 에러가 발생했습니다.' });
     }
 });
 
