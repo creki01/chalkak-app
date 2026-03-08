@@ -174,7 +174,7 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐️ 신규: 1단계 - 유튜브 검색 목록 5개 가져오기
+// 1단계 - 유튜브 검색 목록 5개 가져오기
 app.post('/api/search-youtube', async (req, res) => {
     try {
         const { query } = req.body;
@@ -203,7 +203,7 @@ app.post('/api/search-youtube', async (req, res) => {
     }
 });
 
-// ⭐️ 신규: 2단계 - 사용자가 선택한 영상 제목으로 가사만 추출하기
+// 2단계 - 사용자가 선택한 영상 제목으로 가사만 추출하기
 app.post('/api/fetch-lyrics', async (req, res) => {
     try {
         const { videoTitle } = req.body;
