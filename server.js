@@ -105,7 +105,13 @@ app.post('/api/summarize', async (req, res) => {
         const data = await response.json();
         if (!data.candidates) throw new Error('AI 검열 차단됨');
         
-        const aiText = data.candidates[0].content.parts[0].text;
+        let aiText = data.candidates[0].content.parts[0].text;
+        
+        // JSON 마크다운 잔재 방어
+        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) aiText = jsonMatch[0];
+
         res.json(JSON.parse(aiText));
     } catch (error) {
         res.status(500).json({ error: 'AI 요약 에러' });
@@ -137,7 +143,13 @@ app.post('/api/translate', async (req, res) => {
         });
 
         const data = await response.json();
-        const aiText = data.candidates[0].content.parts[0].text;
+        let aiText = data.candidates[0].content.parts[0].text;
+
+        // JSON 마크다운 잔재 방어
+        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) aiText = jsonMatch[0];
+
         res.json(JSON.parse(aiText));
     } catch (error) {
         res.status(500).json({ error: '단어장 번역 에러' });
@@ -174,7 +186,7 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐ 오늘의 5분 회화
+// ⭐ 오늘의 5분 회화 (에러 완벽 방어 버전)
 app.post('/api/daily-theme', async (req, res) => {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
@@ -214,8 +226,8 @@ app.post('/api/daily-theme', async (req, res) => {
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
-                    temperature: 0.7
-                    // ✅ responseMimeType 제거 - gemini-2.5-flash에서 두 번째 호출부터 오류 유발
+                    temperature: 0.7,
+                    responseMimeType: "application/json" 
                 },
                 safetySettings: safetySettings 
             })
@@ -232,10 +244,14 @@ app.post('/api/daily-theme', async (req, res) => {
             return res.status(500).json({ error: 'AI가 문장을 생성하지 못했습니다.' });
         }
 
-        const aiText = data.candidates[0].content.parts[0].text;
-        // ✅ 마크다운 코드블록 제거 후 파싱
-        const cleanText = aiText.replace(/```json|```/g, '').trim();
-        const parsedData = JSON.parse(cleanText);
+        let aiText = data.candidates[0].content.parts[0].text;
+        
+        // JSON 마크다운 잔재 방어
+        aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) aiText = jsonMatch[0];
+
+        const parsedData = JSON.parse(aiText);
 
         res.json(parsedData);
     } catch (error) {
@@ -338,7 +354,8 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         
         if (lyrics === 'UNKNOWN' || lyrics.length < 20) return res.status(404).json({ error: `"${cleanTitle}" 가사를 찾을 수 없습니다.` });
 
-        lyrics = lyrics.replace(/```[^`]*```/g, '').replace(/\[.*?\]/g, '').replace(/^\s*[\r\n]/gm, '\n').trim();
+        // 🚨 정규식 오류 수정 (내용물은 살리고 껍데기 마크다운만 삭제)
+        lyrics = lyrics.replace(/```[a-zA-Z가-힣]*\n?/g, '').replace(/```/g, '').replace(/\[.*?\]/g, '').replace(/^\s*[\r\n]/gm, '\n').trim();
         res.json({ lyrics, source: 'gemini' });
 
     } catch (error) {
