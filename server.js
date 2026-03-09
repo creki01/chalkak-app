@@ -107,7 +107,6 @@ app.post('/api/summarize', async (req, res) => {
         
         let aiText = data.candidates[0].content.parts[0].text;
         
-        // JSON 마크다운 잔재 방어
         aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
         const jsonMatch = aiText.match(/\{[\s\S]*\}/);
         if (jsonMatch) aiText = jsonMatch[0];
@@ -145,7 +144,6 @@ app.post('/api/translate', async (req, res) => {
         const data = await response.json();
         let aiText = data.candidates[0].content.parts[0].text;
 
-        // JSON 마크다운 잔재 방어
         aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
         const jsonMatch = aiText.match(/\{[\s\S]*\}/);
         if (jsonMatch) aiText = jsonMatch[0];
@@ -186,7 +184,6 @@ app.post('/api/translate-all', async (req, res) => {
     }
 });
 
-// ⭐ 오늘의 5분 회화 (에러 완벽 방어 버전)
 app.post('/api/daily-theme', async (req, res) => {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
@@ -246,7 +243,6 @@ app.post('/api/daily-theme', async (req, res) => {
 
         let aiText = data.candidates[0].content.parts[0].text;
         
-        // JSON 마크다운 잔재 방어
         aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
         const jsonMatch = aiText.match(/\{[\s\S]*\}/);
         if (jsonMatch) aiText = jsonMatch[0];
@@ -287,6 +283,7 @@ app.post('/api/search-youtube', async (req, res) => {
     }
 });
 
+// 🔥 여기가 핵심적으로 수정된 가사 추출 부분입니다.
 app.post('/api/fetch-lyrics', async (req, res) => {
     try {
         const { videoTitle, channelTitle } = req.body;
@@ -294,6 +291,7 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         const cleanTitle = videoTitle.replace(/\[.*?\]|\(.*?\)/g, '').replace(/official|audio|video|lyrics|mv|hd|4k/gi, '').trim();
         const artistName = channelTitle.replace(/official|channel|VEVO|music/gi, '').trim();
 
+        // 1. lrclib와 ovh는 영어 기반 API라 한국어로 검색하면 실패할 확률이 높지만, 일단 찔러봅니다.
         try {
             const queries = [`${artistName} ${cleanTitle}`, cleanTitle, `${channelTitle} ${cleanTitle}`];
             for (const q of queries) {
@@ -321,17 +319,19 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) return res.status(500).json({ error: 'Gemini API 키가 설정되지 않았습니다.' });
 
-        const isKorean = /[가-힣]/.test(cleanTitle) || /[가-힣]/.test(artistName);
-        const langHint = isKorean ? '한국어' : '원어(영어/일본어 등)';
+        // 기존의 isKorean 로직을 삭제하고 프롬프트를 훨씬 강제성 있게 개선했습니다.
+        const prompt = `당신은 전 세계 음악 정보 전문가입니다.
+검색어를 바탕으로 실제 어떤 곡인지 파악한 후, **그 곡의 원래 언어(Original Language)**로 된 가사 원문만 출력하세요.
+(예: 검색어가 '마츠다 세이코 - 푸른 산호초'라도 원래 일본 곡이므로 일본어 원문 가사를 출력해야 합니다.)
 
-        const prompt = `음악 정보 전문가로서 다음 곡의 가사를 알려주세요.
-곡 제목: "${cleanTitle}"
-아티스트: "${artistName}"
-아래 규칙을 반드시 따르세요:
-1. ${langHint} 가사 원문만 출력하세요.
-2. [Verse], [Chorus] 같은 파트 태그, 줄번호, 설명 문구를 절대 포함하지 마세요.
-3. 가사를 모른다면 "UNKNOWN"이라고만 출력하세요.
-4. 1절부터 마지막 절까지 완전한 가사를 출력하세요.`;
+검색된 곡 제목: "${cleanTitle}"
+검색된 아티스트(또는 채널명): "${artistName}"
+
+[필수 규칙]
+1. 반드시 **원어 가사(예: 일본어, 영어 등)**만 출력하세요. 한국어 번역이나 발음을 섞지 마세요.
+2. [Verse], [Chorus] 같은 파트 태그, 줄번호, 곡 설명 등은 절대 포함하지 마세요.
+3. 노래 가사를 찾을 수 없거나 도저히 모르겠다면 "UNKNOWN"이라고만 출력하세요.
+4. 1절부터 마지막까지 완전한 가사를 출력하세요.`;
 
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
         const geminiRes = await fetch(geminiEndpoint, {
@@ -354,7 +354,6 @@ app.post('/api/fetch-lyrics', async (req, res) => {
         
         if (lyrics === 'UNKNOWN' || lyrics.length < 20) return res.status(404).json({ error: `"${cleanTitle}" 가사를 찾을 수 없습니다.` });
 
-        // 🚨 정규식 오류 수정 (내용물은 살리고 껍데기 마크다운만 삭제)
         lyrics = lyrics.replace(/```[a-zA-Z가-힣]*\n?/g, '').replace(/```/g, '').replace(/\[.*?\]/g, '').replace(/^\s*[\r\n]/gm, '\n').trim();
         res.json({ lyrics, source: 'gemini' });
 
