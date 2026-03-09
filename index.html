@@ -181,7 +181,15 @@
         let currentLoopTarget = null; 
 
         let originalExtractedText = "";
-        let myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
+        
+        // 에러 방어: 로컬스토리지 데이터가 깨졌을 때 앱이 먹통되는 현상 방지
+        let myWordbook = [];
+        try {
+            myWordbook = JSON.parse(localStorage.getItem('chalkakWordbook')) || [];
+        } catch (e) {
+            myWordbook = [];
+            localStorage.removeItem('chalkakWordbook');
+        }
 
         function switchTab(tab) {
             stopSpeech();
@@ -307,9 +315,11 @@
             btnElement.classList.add('saved');
         }
 
+        // 언어 감지: 중국어(zh-CN) 정규식 추가 적용
         function getLang(text) {
             if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP';
             if (/[가-힣]/.test(text)) return 'ko-KR';
+            if (/[\u4E00-\u9FA5]/.test(text)) return 'zh-CN'; 
             return 'en-US';
         }
 
